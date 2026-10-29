@@ -75,11 +75,14 @@ export function DroneRegistry({ canManage }: { canManage: boolean }) {
     <section className="registry" aria-labelledby="registry-title">
       <div className="registry-heading">
         <div>
-          <p className="eyebrow">Your aircraft</p>
+          <p className="eyebrow">Operations / Aircraft</p>
           <h3 id="registry-title" ref={headingRef} tabIndex={-1}>Drone registry</h3>
-          <p>{canManage ? 'Register aircraft and keep your fleet information up to date.' : 'Browse your organisation’s registered aircraft. You have read-only access.'}</p>
+          <p>{canManage ? 'Aircraft, registration details, and latest reported status.' : 'Browse your organisation’s registered aircraft. You have read-only access.'}</p>
         </div>
-        {canManage && <button onClick={() => setSelection({ mode: 'create' })}>Register drone</button>}
+        <div className="registry-actions">
+          <button className="secondary" disabled={loading} onClick={() => setRefresh(value => value + 1)}>{loading ? 'Refreshing…' : 'Refresh'}</button>
+          {canManage && <button onClick={() => setSelection({ mode: 'create' })}><span aria-hidden="true">+ </span>Register drone</button>}
+        </div>
       </div>
       <form className="registry-filters" onSubmit={applyFilters} aria-label="Filter drones">
         <div className="search-field">
@@ -106,6 +109,7 @@ export function DroneRegistry({ canManage }: { canManage: boolean }) {
       </form>
       {notice && <p className="success" role="status">{notice}</p>}
       <div className="registry-content" aria-busy={loading}>
+        <div className="table-heading"><span>Registered aircraft</span><span className="muted">Latest reported values · Refresh to update</span></div>
         {loading ? <p className="registry-state" role="status">Loading your fleet…</p> : error ? (
           <div className="registry-state"><p className="error" role="alert">{error}</p><button className="secondary" onClick={() => setRefresh(value => value + 1)}>Retry loading fleet</button></div>
         ) : page && page.drones.length === 0 ? (

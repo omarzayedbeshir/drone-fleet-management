@@ -70,11 +70,11 @@ export function App() {
   function signedOut(text: string) { setUser(null); setNotice(text); }
 
   return (
-    <main className={user ? 'app-main' : undefined}>
-      <header>
-        <p className="eyebrow">Drone Fleet Management</p>
-        <h1>AeroSync</h1>
-        <p className="intro">One workspace for your mixed-vendor drone fleet.</p>
+    <main className={user ? 'app-main' : 'login-main'}>
+      <header className="app-header">
+        <div className="brand"><span className="brand-mark" aria-hidden="true">a<span>+</span></span><h1>AeroSync</h1></div>
+        <span className="header-label">Fleet operations</span>
+        <span className="header-context">{user ? roles[user.role].label : 'Workspace access'}</span>
       </header>
       {loading ? <p role="status">Checking your session…</p> : initialError ? (
         <section className="panel" aria-label="Connection problem">
@@ -107,6 +107,7 @@ function Login({ notice, signedIn }: { notice: string; signedIn: (user: User) =>
 
   return (
     <section className="panel auth-panel" aria-labelledby="signin-title">
+      <p className="eyebrow">AeroSync / Access</p>
       <h2 id="signin-title">Sign in to your workspace</h2>
       <p>Use the account provided by your administrator or fleet manager.</p>
       {notice && <p role="status">{notice}</p>}
@@ -138,25 +139,25 @@ function Workspace({ user, signedOut }: { user: User; signedOut: (text: string) 
   }
 
   return (
-    <section className="panel" aria-labelledby="workspace-title">
+    <section className="workspace" aria-labelledby="workspace-title">
       <div className="workspace-heading">
         <div>
-          <p className="eyebrow">{role.label}</p>
           <h2 id="workspace-title">Welcome, {user.name}</h2>
-          <p>{role.description}</p>
+          <p className="account">{user.email}</p>
         </div>
-        <button className="secondary" onClick={logout} disabled={busy}>{busy ? 'Signing out…' : 'Sign out'}</button>
+        <div className="account-actions">
+          <button className="text-button" aria-expanded={showPassword} aria-controls="password-panel"
+            onClick={() => setShowPassword(value => !value)}>{showPassword ? 'Cancel password change' : 'Change password'}</button>
+          <button className="secondary" onClick={logout} disabled={busy}>{busy ? 'Signing out…' : 'Sign out'}</button>
+        </div>
       </div>
-      <p className="account">{user.email}</p>
+      {error && <p role="alert" className="error">{error}</p>}
+      {showPassword && <PasswordForm signedOut={signedOut} />}
       {user.role === 'system_administrator' ? <>
         <h3>Your workspace</h3>
         <ul className="areas">{role.areas.map(area => <li key={area}>{area}<span>Coming soon</span></li>)}</ul>
       </> : <DroneRegistry canManage={user.role === 'fleet_manager'} />}
-      <p className="muted">Sessions expire after 30 minutes of inactivity.</p>
-      {error && <p role="alert" className="error">{error}</p>}
-      <button className="secondary" aria-expanded={showPassword} aria-controls="password-panel"
-        onClick={() => setShowPassword(value => !value)}>{showPassword ? 'Cancel password change' : 'Change password'}</button>
-      {showPassword && <PasswordForm signedOut={signedOut} />}
+      <footer className="workspace-footer"><span>AeroSync · Fleet management</span><span>Sessions expire after 30 minutes of inactivity.</span></footer>
     </section>
   );
 }
