@@ -19,7 +19,7 @@ System administrators are the exception: they have no organisation. Every other 
 | `organisations` | UUID, trimmed nonempty name, creation and update timestamps. Names need not be globally unique. |
 | `users` | UUID, organisation, name, canonical globally unique email, password hash, role, active flag, timestamps. |
 | `drones` | UUID, organisation, name, vendor, model, serial number, status, last telemetry timestamp, timestamps. |
-| `drone_registry_events` | Append-only registry audit events with actor, drone ID, action, before/after snapshots, and timestamp. |
+| `audit_events` | Shared append-only tenant audit events with actor, resource type/ID, action, before/after snapshots, and timestamp. |
 | `auth_sessions` | SHA-256 token hash, user, creation/last-activity timestamps, absolute expiry. |
 | `schema_migrations` | Migration filename without extension, SQL checksum, application timestamp. Managed by the runner. |
 
@@ -55,6 +55,12 @@ Migration `000003_auth_sessions.sql` adds database-backed sessions. Only SHA-256
 
 The API now supplies shared authentication/role middleware and derives the current organisation from the database session. Future tenant endpoints must use that authenticated context and apply it to every query; the schema does not supply row-level security.
 
-## Drone registry audit
+## Shared audit events
 
-Migration `000004_drone_registry_audit.sql` adds `drone_registry_events`. Drone creation, metadata updates, and deletion commit atomically with their audit events. The event stores the server-authenticated actor ID, organisation, drone ID, action, UTC drone snapshots before/after, and a server timestamp. Actor and drone IDs deliberately have no foreign keys: events survive account/drone removal without mutating history. The organisation foreign key cascades when the organisation is removed. A trigger rejects ordinary UPDATE/DELETE on audit rows and permits organisation-deletion cascades. Database owners can bypass triggers, so production privileges still require separate provisioning. No audit HTTP endpoint or automated retention purge is introduced.
+Migration `000004_drone_registry_audit.sql` originally introduced drone-specific history. Migration `000005_shared_audit_events.sql` renames that table to `audit_events`, renames `drone_id` to `resource_id`, and tags existing history with `resource_type = 'drone'`. Event IDs, actor/organisation IDs, actions, snapshots, and timestamps are preserved. Migration 000004 remains unchanged.
+
+New events require an explicit resource type. Types and actions use lowercase identifiers with underscores/digits (type up to 64 characters; action up to 100). Snapshots are JSON objects or SQL NULL, with at least one snapshot required. `created` requires only an after snapshot; `updated` requires both; `deleted` requires only a before snapshot. Other domain actions can supply one or both snapshots.
+
+The shared `internal/audit.Recorder` contract is `Record(ctx, tx, event) error`. `PostgresRecorder` validates and serializes snapshots and inserts using the supplied `pgx.Tx`; it never owns a pool or commits independently. The registry injects the recorder and invokes it inside each create/update/delete transaction. Missing recorders and recording failures roll back the drone mutation. See [AUDIT.md](AUDIT.md) for usage.
+
+Actor and resource IDs deliberately have no foreign keys: events survive account/resource removal. The organisation foreign key still cascades on organisation deletion. Triggers reject ordinary UPDATE, DELETE, and TRUNCATE; organisation-deletion cascades are permitted. Database owners can bypass triggers, so production privileges still require separate provisioning. There is no audit HTTP endpoint or automated retention purge. Future workflow services must explicitly call the recorder to gain audit coverage.

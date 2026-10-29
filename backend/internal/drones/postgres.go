@@ -2,16 +2,19 @@ package drones
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/audit"
 )
 
-type PostgresStore struct{ Pool *pgxpool.Pool }
+type PostgresStore struct {
+	Pool     *pgxpool.Pool
+	Recorder audit.Recorder
+}
 
 const columns = `id::text, organisation_id::text, name, vendor, model, serial_number,
  status, last_telemetry_at, created_at, updated_at`
@@ -41,25 +44,14 @@ func translateError(err error) error {
 	return err
 }
 
-func recordEvent(ctx context.Context, tx pgx.Tx, org, actor, id, action string, before, after *Drone) error {
-	var oldData, newData []byte
-	var err error
-	if before != nil {
-		oldData, err = json.Marshal(before)
-		if err != nil {
-			return err
-		}
+func (s *PostgresStore) record(ctx context.Context, tx pgx.Tx, org, actor, id string, action audit.Action, before, after *Drone) error {
+	if s.Recorder == nil {
+		return errors.New("drone registry requires an audit recorder")
 	}
-	if after != nil {
-		newData, err = json.Marshal(after)
-		if err != nil {
-			return err
-		}
-	}
-	_, err = tx.Exec(ctx, `INSERT INTO drone_registry_events
-  (organisation_id, actor_id, drone_id, action, before_data, after_data) VALUES ($1,$2,$3,$4,$5,$6)`,
-		org, actor, id, action, oldData, newData)
-	return err
+	return s.Recorder.Record(ctx, tx, audit.Event{
+		OrganisationID: org, ActorID: actor, ResourceType: audit.DroneResource,
+		ResourceID: id, Action: action, Before: before, After: after,
+	})
 }
 
 func (s *PostgresStore) Create(ctx context.Context, org, actor string, m Metadata) (Drone, error) {
@@ -73,7 +65,7 @@ func (s *PostgresStore) Create(ctx context.Context, org, actor string, m Metadat
 	if err != nil {
 		return Drone{}, err
 	}
-	if err := recordEvent(ctx, tx, org, actor, d.ID, "created", nil, &d); err != nil {
+	if err := s.record(ctx, tx, org, actor, d.ID, audit.Created, nil, &d); err != nil {
 		return Drone{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -131,7 +123,7 @@ func (s *PostgresStore) Update(ctx context.Context, org, actor, id string, p Pat
 	if err != nil {
 		return Drone{}, err
 	}
-	if err := recordEvent(ctx, tx, org, actor, id, "updated", &before, &after); err != nil {
+	if err := s.record(ctx, tx, org, actor, id, audit.Updated, &before, &after); err != nil {
 		return Drone{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -150,7 +142,7 @@ func (s *PostgresStore) Delete(ctx context.Context, org, actor, id string) error
 	if err != nil {
 		return err
 	}
-	if err := recordEvent(ctx, tx, org, actor, id, "deleted", &before, nil); err != nil {
+	if err := s.record(ctx, tx, org, actor, id, audit.Deleted, &before, nil); err != nil {
 		return err
 	}
 	return translateError(tx.Commit(ctx))

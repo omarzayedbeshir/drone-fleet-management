@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/audit"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/auth"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/database"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/drones"
@@ -43,7 +44,7 @@ func run() error {
 		}
 	}
 	handler, err := httpapi.NewAuthenticatedHandler(httpapi.AuthConfig{
-		Store: &auth.PostgresStore{Pool: pool}, Registry: &drones.PostgresStore{Pool: pool}, Origin: os.Getenv("APP_ORIGIN"), SecureCookies: secure,
+		Store: &auth.PostgresStore{Pool: pool}, Registry: &drones.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}}, Origin: os.Getenv("APP_ORIGIN"), SecureCookies: secure,
 	})
 	if err != nil {
 		return err

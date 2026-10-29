@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/audit"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/auth"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/drones"
 )
@@ -53,7 +54,7 @@ func TestDroneRegistryIntegration(t *testing.T) {
 	pilot, _ := session(auth.Pilot, &orgA)
 	technician, _ := session(auth.MaintenanceTechnician, &orgA)
 	admin, _ := session(auth.SystemAdministrator, nil)
-	registry := &drones.PostgresStore{Pool: pool}
+	registry := &drones.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}}
 	handler, err := NewAuthenticatedHandler(AuthConfig{Store: authStore, Registry: registry, Origin: "http://localhost:5173"})
 	if err != nil {
 		t.Fatal(err)
@@ -199,7 +200,7 @@ func TestDroneRegistryIntegration(t *testing.T) {
 	}
 	// Audit failure must roll back the drone write as well.
 	exec(`CREATE FUNCTION reject_audit_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test audit failure'; END $$`)
-	exec(`CREATE TRIGGER reject_audit BEFORE INSERT ON drone_registry_events FOR EACH ROW EXECUTE FUNCTION reject_audit_insert()`)
+	exec(`CREATE TRIGGER reject_audit BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION reject_audit_insert()`)
 	status(request("PATCH", "/"+drone.ID, `{"name":"Must roll back"}`, manager), 503)
 	status(request("DELETE", "/"+drone.ID, "", manager), 503)
 	status(request("POST", "", `{"name":"Must roll back","vendor":"dji","model":"m","serial_number":"FAIL"}`, manager), 503)
@@ -210,11 +211,11 @@ func TestDroneRegistryIntegration(t *testing.T) {
 	if len(list("?q=Must", manager).Drones) != 0 {
 		t.Fatal("failed audit persisted a registration")
 	}
-	exec(`DROP TRIGGER reject_audit ON drone_registry_events`)
+	exec(`DROP TRIGGER reject_audit ON audit_events`)
 	status(request("DELETE", "/"+drone.ID, "", manager), 204)
 	status(request("GET", "/"+drone.ID, "", manager), 404)
 	status(request("DELETE", "/"+drone.ID, "", manager), 404)
-	rows, err := pool.Query(ctx, `SELECT action,actor_id::text,before_data,after_data FROM drone_registry_events WHERE drone_id=$1 ORDER BY id`, drone.ID)
+	rows, err := pool.Query(ctx, `SELECT action,actor_id::text,before_data,after_data FROM audit_events WHERE resource_type='drone' AND resource_id=$1 ORDER BY id`, drone.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +248,7 @@ func TestDroneRegistryIntegration(t *testing.T) {
 	if fmt.Sprint(actions) != "[created updated deleted]" {
 		t.Fatalf("unexpected audit actions %v", actions)
 	}
-	for _, sql := range []string{`UPDATE drone_registry_events SET action='deleted' WHERE drone_id=$1`, `DELETE FROM drone_registry_events WHERE drone_id=$1`} {
+	for _, sql := range []string{`UPDATE audit_events SET action='deleted' WHERE resource_type='drone' AND resource_id=$1`, `DELETE FROM audit_events WHERE resource_type='drone' AND resource_id=$1`} {
 		_, err := pool.Exec(ctx, sql, drone.ID)
 		pgErr, ok := err.(*pgconn.PgError)
 		if !ok || pgErr.Code != "42501" {
@@ -279,7 +280,7 @@ func TestDroneRegistryIntegration(t *testing.T) {
 	}
 	exec(`DELETE FROM organisations WHERE id=$1`, orgA)
 	var count int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM drone_registry_events WHERE organisation_id=$1`, orgA).Scan(&count); err != nil || count != 0 {
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM audit_events WHERE organisation_id=$1`, orgA).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("tenant removal did not purge audit: %d %v", count, err)
 	}
 	status(request("GET", "/"+foreignID, "", other), 200)

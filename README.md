@@ -87,13 +87,13 @@ docker compose exec -T database sh -c 'exec psql -X -v ON_ERROR_STOP=1 -U "$POST
 
 These checks use disposable fixtures inside a rolled-back transaction. Run them against a development or test database.
 
-To run the PostgreSQL-backed authentication and registry tests locally:
+To run the PostgreSQL-backed authentication, registry, and audit tests locally:
 
 ```sh
 cd backend
-TEST_DATABASE_URL='postgres://aerosync:aerosync_local@localhost:5432/aerosync?sslmode=disable' go test -race ./internal/httpapi -run 'Test(Authentication|DroneRegistry)Integration' -count=1
+TEST_DATABASE_URL='postgres://aerosync:aerosync_local@localhost:5432/aerosync?sslmode=disable' go test -race ./internal/httpapi -run Integration -count=1
 ```
 
 Use a development or test database. Tests create an isolated schema, apply the application migrations, exercise HTTP handlers with the PostgreSQL store, then drop the schema. Without `TEST_DATABASE_URL`, regular Go tests skip these integration checks.
 
-CI runs the application checks, authentication/registry integration tests, and database migrations/integration checks on pushes and pull requests. Stop the database with `docker compose down`; its named volume persists.
+CI runs the application checks, authentication/registry/audit integration tests, and database migrations/integration checks on pushes and pull requests. Stop the database with `docker compose down`; its named volume persists.

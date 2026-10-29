@@ -1,6 +1,6 @@
 # Drone registry REST API
 
-Base path: `/api/v1/drones`. Apply migrations through `000004_drone_registry_audit.sql` and restart the Go API before using these endpoints. Authentication uses the existing session cookie. The frontend provides a registry workspace for fleet managers, pilots, and maintenance technicians. Managers can register, edit, and remove aircraft; pilots and technicians have read-only list/detail access.
+Base path: `/api/v1/drones`. Apply migrations through `000005_shared_audit_events.sql` and restart the Go API before using these endpoints. Authentication uses the existing session cookie. The frontend provides a registry workspace for fleet managers, pilots, and maintenance technicians. Managers can register, edit, and remove aircraft; pilots and technicians have read-only list/detail access.
 
 ## Access
 
@@ -100,7 +100,7 @@ Errors use `{ "error": "message" }`.
 - 415: POST/PATCH content type is not JSON.
 - 503: storage or audit persistence is unavailable; no partial write is committed.
 
-Each successful create/update/delete records its authenticated actor, organisation, drone ID, action, timestamp, and before/after snapshots in `drone_registry_events`. Failed requests create no audit event. Updates lock the drone while applying the patch so concurrent changes preserve omitted fields. Audit rows are append-only under ordinary SQL updates/deletes. They survive drone/user deletion and are removed only when their organisation is deleted. The initial registry has no mission/telemetry references; future migrations must protect deletions of drones with operational history.
+Each successful create/update/delete records its authenticated actor, organisation, drone ID, action, timestamp, and before/after snapshots in `audit_events` (`resource_type = 'drone'`). Failed requests create no audit event. Updates lock the drone while applying the patch so concurrent changes preserve omitted fields. Audit rows are append-only under ordinary SQL updates/deletes. They survive drone/user deletion and are removed only when their organisation is deleted. The initial registry has no mission/telemetry references; future migrations must protect deletions of drones with operational history.
 
 ## Verification
 
@@ -108,7 +108,7 @@ From `backend/`, with a disposable PostgreSQL database:
 
 ```sh
 TEST_DATABASE_URL='postgres://USER:PASSWORD@HOST:PORT/DATABASE?sslmode=disable' \
-  go test -race ./internal/httpapi -run 'Test(Authentication|DroneRegistry)Integration' -count=1
+  go test -race ./internal/httpapi -run Integration -count=1
 ```
 
 Tests create and remove isolated schemas; they do not use or change existing drone/user records. They cover CRUD, all roles, tenant isolation, duplicate conflicts, pagination/search, read-only operational fields, audit snapshots/immutability, and transactional rollback when auditing fails. CI runs the same suites against the Compose TimescaleDB service.
