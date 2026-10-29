@@ -115,6 +115,6 @@ The separate `ardupilot-adapter` process reads a configured MAVLink TCP endpoint
 
 ## Sprint 1 platform handoff
 
-See [stack and single-node server decisions](docs/ARCHITECTURE.md), [the R-15 spike result](docs/spikes/R15.md), and [the review workflow](docs/REVIEWING.md). `main` requires a pull request with one approval and passing backend, frontend, database, and OpenAPI checks.
+See [stack and single-node server decisions](docs/ARCHITECTURE.md), [the R-15 spike result](docs/spikes/R15.md), and [the review workflow](docs/REVIEWING.md). `main` requires a pull request and passing backend, frontend, database, and OpenAPI checks. Other contributors need Omar's code-owner approval; Omar has an account-specific review bypass.
 
 For a walkthrough from UI registration to simulated telemetry, use the [SITL demo and troubleshooting guide](docs/SITL_DEMO.md). Registering a drone does not start a connection: the adapter runs separately, and the fleet page requires a refresh to show new readings.
