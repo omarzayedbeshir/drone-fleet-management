@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
-          cache: false
+          cache-dependency-path: backend/go.sum
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go test -race ./...
@@ -36,6 +36,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
       - run: docker compose up -d --wait database
       - run: ./backend/scripts/migrate.sh
       - run: ./backend/scripts/migrate.sh
@@ -44,6 +48,11 @@ jobs:
           docker compose exec -T database sh -c
           'exec psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
           < backend/tests/schema.sql
+      - name: Authentication integration tests
+        working-directory: backend
+        env:
+          TEST_DATABASE_URL: postgres://aerosync:aerosync_local@127.0.0.1:5432/aerosync?sslmode=disable
+        run: go test -race ./internal/httpapi -run TestAuthenticationIntegration -count=1
       - name: Database logs on failure
         if: failure()
         run: docker compose logs database

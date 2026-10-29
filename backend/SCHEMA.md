@@ -19,9 +19,10 @@ System administrators are the exception: they have no organisation. Every other 
 | `organisations` | UUID, trimmed nonempty name, creation and update timestamps. Names need not be globally unique. |
 | `users` | UUID, organisation, name, canonical globally unique email, password hash, role, active flag, timestamps. |
 | `drones` | UUID, organisation, name, vendor, model, serial number, status, last telemetry timestamp, timestamps. |
+| `auth_sessions` | SHA-256 token hash, user, creation/last-activity timestamps, absolute expiry. |
 | `schema_migrations` | Migration filename without extension, SQL checksum, application timestamp. Managed by the runner. |
 
-User roles are `system_administrator`, `fleet_manager`, `pilot`, and `maintenance_technician`. A check constraint requires an organisation for tenant roles and forbids an organisation for system administrators. Deactivate users with `is_active = false`; authentication must reject inactive users. Account invitation/token storage will be added with authentication. Password hashes are required; the authentication service must generate and verify Argon2 or bcrypt hashes. The database only rejects empty hashes and cannot prove a value is securely hashed.
+User roles are `system_administrator`, `fleet_manager`, `pilot`, and `maintenance_technician`. A check constraint requires an organisation for tenant roles and forbids an organisation for system administrators. Deactivate users with `is_active = false`; authentication must reject inactive users. Accounts are currently provisioned through the operator CLI; invitation and password-recovery delivery are not implemented. Password hashes are required; the authentication service must generate and verify Argon2 or bcrypt hashes. The database only rejects empty hashes and cannot prove a value is securely hashed.
 
 Emails must already be trimmed and lowercase. Global uniqueness gives login one unambiguous account per email. The API must normalize and validate addresses before insertion. Names, models, and serial numbers are trimmed and limited to 200 characters.
 
@@ -39,10 +40,16 @@ Tenant foreign keys and indexes establish ownership; they do **not** enforce cal
 
 Future tables that reference a tenant-owned user or drone should carry `organisation_id` and use composite foreign keys to prevent cross-tenant relationships. Add the corresponding `(organisation_id, id)` unique keys when those relationships are introduced.
 
-Telemetry hypertables, mission assignments, maintenance records, append-only audit events, sessions, and AI preferences are intentionally deferred. This migration does not implement the full requirements model.
+Telemetry hypertables, mission assignments, maintenance records, append-only audit events, and AI preferences are intentionally deferred. This migration does not implement the full requirements model.
 
 ## Migration operation
 
 Run `./backend/scripts/migrate.sh` from any directory. It applies the TimescaleDB extension migration and then the core schema, recording checksums. An old volume with the extension already installed is supported because the original extension migration is idempotent. The whole batch rolls back on a SQL error or checksum mismatch. Do not edit applied files or run migration SQL manually; add a subsequent numbered SQL file and use the runner.
 
 The Compose database role is a local development owner. Production application connections should use a separate restricted role; production role provisioning is outside this local setup.
+
+## Authentication sessions
+
+Migration `000003_auth_sessions.sql` adds database-backed sessions. Only SHA-256 hashes of cryptographically random 256-bit tokens are stored. Session lookup checks the current active user, enforces a 30-minute idle timeout and a 24-hour absolute lifetime, and advances `last_seen_at`. Password, role, organisation, or active-flag changes delete all sessions through a database trigger. Deleting a user cascades to their sessions. Expired sessions for a user are pruned on their next successful login; inactive accounts' expired rows can also be removed with the maintenance query in [AUTH.md](AUTH.md).
+
+The API now supplies shared authentication/role middleware and derives the current organisation from the database session. Future tenant endpoints must use that authenticated context and apply it to every query; the schema does not supply row-level security.
