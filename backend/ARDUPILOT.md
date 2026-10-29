@@ -14,6 +14,8 @@ From the repository root, start a separate simulator:
 
 The helper runs ArduCopter with its built-in physics, instance 20, Cairo home coordinates, and MAVLink TCP port 15760. The default state directory is `backend/.local/sitl` (ignored by Git), preserving EEPROM/statistics and boot count across runs. `SITL_STATE_DIR` can select another state directory. No arming, takeoff, or movement command is sent by the adapter/helper. This is simulated telemetry, not physical-aircraft verification.
 
+To generate changing positions after connecting the adapter, use the separate [SITL flight demo](../docs/SITL_DEMO.md#5-fly-the-simulation): `python3 backend/scripts/fly-sitl.py` from the repository root. It verifies the isolated simulator, uses its secondary control port, flies a short square pattern, and lands. Flight-control commands remain outside the telemetry adapter and web API.
+
 Register a drone in the frontend with **ArduPilot** as the vendor and a serial such as `AP-SITL-001`. Use a fleet manager in the same organisation. Stop the API before applying pending migrations; then from `backend/`:
 
 ```sh
@@ -30,7 +32,7 @@ go run ./cmd/ardupilot-adapter \
   --max-samples 5
 ```
 
-Omit `--max-samples` to run continuously. Restart `go run ./cmd/api` in another terminal to view registry projections. Refresh the fleet page or apply its filters to reload changed values; live dashboard push updates are not included. Use your actual manager email/serial; the worker resolves the UUIDs and organisation itself. Alternatively provide `--actor-id` and `--drone-id` UUIDs. Exactly one actor selector and one drone selector are required. Actor role/active status and organisation membership are rechecked before each ingestion attempt. Existing telemetry migrations (through 000006) are required; this adapter adds no migration.
+Omit `--max-samples` to run continuously. Restart `go run ./cmd/api` in another terminal to view registry projections. Refresh the fleet page or use its Refresh button to reload registry values. Select **Show map** for telemetry readings, GPS trails; telemetry refreshes automatically every five seconds while the map is open. See [the map guide](../frontend/MAP.md). Use your actual manager email/serial; the worker resolves the UUIDs and organisation itself. Alternatively provide `--actor-id` and `--drone-id` UUIDs. Exactly one actor selector and one drone selector are required. Actor role/active status and organisation membership are rechecked before each ingestion attempt. Existing telemetry migrations (through 000006) are required; this adapter adds no migration.
 
 For an existing `sim_vehicle.py` session, use `--endpoint tcp://127.0.0.1:5760`. For a MAVProxy UDP relay, run its `--out=udp:127.0.0.1:14550` and use `--endpoint udp://127.0.0.1:14550`; the adapter listens on that port. Default target IDs are system 1/component 1; configure `--system-id` and `--component-id` if your flight controller differs. One adapter process per registered drone is the supported binding.
 

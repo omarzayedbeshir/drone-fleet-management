@@ -68,11 +68,31 @@ go run ./cmd/ardupilot-adapter \
 
 Replace the email and serial with your actual fleet manager and registered drone. The adapter resolves their UUIDs and organisation, then checks actor access before each ingestion attempt. Use one consumer per SITL TCP serial endpoint. Add `--max-samples 5` to stop after five accepted observations; omit it for continuous ingestion.
 
-Wait for `ArduPilot telemetry accepted` logs. Health appears every ten seconds; a socket connection alone does not mean ingestion is ready. Initial readings may lack GPS until a fresh 3D fix arrives. Refresh the fleet page or apply its filters to reload the latest readings. The app does not currently push live telemetry updates or display a connector health panel.
+Wait for `ArduPilot telemetry accepted` logs. Health appears every ten seconds; a socket connection alone does not mean ingestion is ready. Initial readings may lack GPS until a fresh 3D fix arrives. Refresh the fleet page or apply its filters to reload the latest readings. Select **Show map** for GPS positions and telemetry readings. The map refreshes automatically every five seconds to monitor new coordinates. There is no connector health panel; see [the map guide](../frontend/MAP.md).
 
 SITL flight time can remain zero while the simulated vehicle stays on the ground. Battery-cycle totals are preserved from the database; they are not measured from this feed. A stored grounded status remains grounded under the ingestion safety rule.
 
-## 5. Verify and stop
+## 5. Fly the simulation
+
+The simulator starts on the ground. To see movement, keep SITL and the telemetry adapter running, and open **Show map**; telemetry refreshes automatically. Then, from the repository root:
+
+```sh
+python3 backend/scripts/fly-sitl.py
+```
+
+From `backend/`, use `python3 scripts/fly-sitl.py`. The separate demo controller uses pymavlink, takes off to 12 metres above home, flies two 60-metre squares, and lands with automatic disarm. Use `--laps 1` for a shorter run or `--laps 5` for longer monitoring. It uses the simulator's secondary TCP port 5962; the adapter keeps reading port 15760. The script checks that the local listener belongs to the expected compiled ArduCopter SITL instance 20 and refuses arbitrary endpoints or an already armed aircraft. It leaves normal arming checks enabled and attempts LAND on flight errors or interruption rather than forcing disarm in the air.
+
+If your Python cannot import pymavlink, install it in a dedicated environment under the ignored local directory and use that interpreter:
+
+```sh
+python3 -m venv backend/.local/sitl-python
+backend/.local/sitl-python/bin/pip install pymavlink
+backend/.local/sitl-python/bin/python backend/scripts/fly-sitl.py
+```
+
+The map uses MSL altitude, so a 12-metre climb from the default 100-metre home appears near 112 metres. The flight is simulated; its measured positions are ingested into the registered simulation drone's history. After landing, the map retains the recent GPS trail. The map retains only its latest 100-observation window, not the entire flight. See [ArduPilot guided commands](https://ardupilot.org/dev/docs/copter-commands-in-guided-mode.html) for the protocol used by the controller.
+
+## 6. Verify and stop
 
 For repeatable verification, use the [live SITL test commands](../backend/ARDUPILOT.md#verification). Stop the running adapter first so the tests can consume the TCP endpoint. Database tests use private schemas rather than the UI drone; they check stored history, receipts, latest projection consistency, and duplicate replay.
 
