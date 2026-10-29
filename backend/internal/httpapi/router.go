@@ -51,6 +51,9 @@ func NewAuthenticatedHandler(config AuthConfig) (http.Handler, error) {
 	if config.Registry != nil {
 		registerDrones(mux, a, config.Registry)
 	}
+	if config.Telemetry != nil {
+		registerTelemetry(mux, a, config.Telemetry)
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Cache-Control", "no-store")

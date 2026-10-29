@@ -1,6 +1,6 @@
 # Drone registry REST API
 
-Base path: `/api/v1/drones`. Apply migrations through `000005_shared_audit_events.sql` and restart the Go API before using these endpoints. Authentication uses the existing session cookie. The frontend provides a registry workspace for fleet managers, pilots, and maintenance technicians. Managers can register, edit, and remove aircraft; pilots and technicians have read-only list/detail access.
+Base path: `/api/v1/drones`. Apply migrations through `000006_telemetry_ingestion.sql` and restart the Go API before using these endpoints. Authentication uses the existing session cookie. The frontend provides a registry workspace for fleet managers, pilots, and maintenance technicians. Managers can register, edit, and remove aircraft; pilots and technicians have read-only list/detail access.
 
 ## Access
 
@@ -56,6 +56,9 @@ Create, retrieve, and update responses use this shape:
     "model": "Mavic 3 Enterprise",
     "serial_number": "DJI-0001",
     "status": "unknown",
+    "flight_time_seconds": 0,
+    "battery_cycles": 0,
+    "fault_flags": [],
     "last_telemetry_at": null,
     "created_at": "2026-10-29T07:00:00Z",
     "updated_at": "2026-10-29T07:00:00Z"
@@ -63,7 +66,7 @@ Create, retrieve, and update responses use this shape:
 }
 ```
 
-New drones always have `unknown` status and no telemetry timestamp. Registry edits preserve any existing operational status and telemetry timestamp. This API returns stored status; telemetry ingestion, freshness expiry, and maintenance grounding transitions are separate workflows.
+New drones always have `unknown` status and no telemetry timestamp. Registry edits preserve any existing operational status and telemetry timestamp. This API returns stored status; normalized ingestion updates current totals/status; freshness expiry and maintenance grounding transitions remain separate workflows.
 
 ## Listing
 
@@ -100,7 +103,7 @@ Errors use `{ "error": "message" }`.
 - 415: POST/PATCH content type is not JSON.
 - 503: storage or audit persistence is unavailable; no partial write is committed.
 
-Each successful create/update/delete records its authenticated actor, organisation, drone ID, action, timestamp, and before/after snapshots in `audit_events` (`resource_type = 'drone'`). Failed requests create no audit event. Updates lock the drone while applying the patch so concurrent changes preserve omitted fields. Audit rows are append-only under ordinary SQL updates/deletes. They survive drone/user deletion and are removed only when their organisation is deleted. The initial registry has no mission/telemetry references; future migrations must protect deletions of drones with operational history.
+Each successful create/update/delete records its authenticated actor, organisation, drone ID, action, timestamp, and before/after snapshots in `audit_events` (`resource_type = 'drone'`). Failed requests create no audit event. Updates lock the drone while applying the patch so concurrent changes preserve omitted fields. Audit rows are append-only under ordinary SQL updates/deletes. They survive drone/user deletion and are removed only when their organisation is deleted. Registrations with accepted telemetry history cannot be deleted: the foreign-key conflict returns 409 and the deletion audit entry rolls back too.
 
 ## Verification
 

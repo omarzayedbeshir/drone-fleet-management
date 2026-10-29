@@ -16,16 +16,19 @@ var (
 )
 
 type Drone struct {
-	ID              string     `json:"id"`
-	OrganisationID  string     `json:"organisation_id"`
-	Name            string     `json:"name"`
-	Vendor          string     `json:"vendor"`
-	Model           string     `json:"model"`
-	SerialNumber    string     `json:"serial_number"`
-	Status          string     `json:"status"`
-	LastTelemetryAt *time.Time `json:"last_telemetry_at"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	ID                string     `json:"id"`
+	OrganisationID    string     `json:"organisation_id"`
+	Name              string     `json:"name"`
+	Vendor            string     `json:"vendor"`
+	Model             string     `json:"model"`
+	SerialNumber      string     `json:"serial_number"`
+	Status            string     `json:"status"`
+	FlightTimeSeconds int64      `json:"flight_time_seconds"`
+	BatteryCycles     int64      `json:"battery_cycles"`
+	FaultFlags        []string   `json:"fault_flags"`
+	LastTelemetryAt   *time.Time `json:"last_telemetry_at"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
 type Metadata struct {

@@ -21,6 +21,9 @@ System administrators are the exception: they have no organisation. Every other 
 | `drones` | UUID, organisation, name, vendor, model, serial number, status, last telemetry timestamp, timestamps. |
 | `audit_events` | Shared append-only tenant audit events with actor, resource type/ID, action, before/after snapshots, and timestamp. |
 | `auth_sessions` | SHA-256 token hash, user, creation/last-activity timestamps, absolute expiry. |
+| `telemetry_samples` | TimescaleDB hypertable of validated observations, keyed by tenant/drone/time. |
+| `telemetry_receipts` | Global source-event identity and canonical payload hash for idempotency. |
+| `telemetry_rejections` | Append-only reason codes and payload hashes; no raw payloads. |
 | `schema_migrations` | Migration filename without extension, SQL checksum, application timestamp. Managed by the runner. |
 
 User roles are `system_administrator`, `fleet_manager`, `pilot`, and `maintenance_technician`. A check constraint requires an organisation for tenant roles and forbids an organisation for system administrators. Deactivate users with `is_active = false`; authentication must reject inactive users. Accounts are currently provisioned through the operator CLI; invitation and password-recovery delivery are not implemented. Password hashes are required; the authentication service must generate and verify Argon2 or bcrypt hashes. The database only rejects empty hashes and cannot prove a value is securely hashed.
@@ -41,7 +44,7 @@ Tenant foreign keys and indexes establish ownership; they do **not** enforce cal
 
 Future tables that reference a tenant-owned user or drone should carry `organisation_id` and use composite foreign keys to prevent cross-tenant relationships. Add the corresponding `(organisation_id, id)` unique keys when those relationships are introduced.
 
-Telemetry hypertables, mission assignments, maintenance records, audit coverage for future workflows, and AI preferences are intentionally deferred. This migration does not implement the full requirements model.
+Mission assignments, maintenance records, audit coverage for future workflows, and AI preferences are intentionally deferred. This migration does not implement the full requirements model.
 
 ## Migration operation
 
@@ -64,3 +67,9 @@ New events require an explicit resource type. Types and actions use lowercase id
 The shared `internal/audit.Recorder` contract is `Record(ctx, tx, event) error`. `PostgresRecorder` validates and serializes snapshots and inserts using the supplied `pgx.Tx`; it never owns a pool or commits independently. The registry injects the recorder and invokes it inside each create/update/delete transaction. Missing recorders and recording failures roll back the drone mutation. See [AUDIT.md](AUDIT.md) for usage.
 
 Actor and resource IDs deliberately have no foreign keys: events survive account/resource removal. The organisation foreign key still cascades on organisation deletion. Triggers reject ordinary UPDATE, DELETE, and TRUNCATE; organisation-deletion cascades are permitted. Database owners can bypass triggers, so production privileges still require separate provisioning. There is no audit HTTP endpoint or automated retention purge. Future workflow services must explicitly call the recorder to gain audit coverage.
+
+## Normalized telemetry
+
+Migration `000006_telemetry_ingestion.sql` adds the observation hypertable, a global duplicate-receipt table, durable rejection logs, and read-only drone totals (`flight_time_seconds`, `battery_cycles`, and `fault_flags`). Accepted history/receipts are immutable under ordinary SQL, as are rejection logs; organisation removal purges these records. Drone foreign keys protect registrations with telemetry history from deletion. Receipt foreign keys include the observation timestamp so a source event cannot point to mismatched history.
+
+Ingestion locks the owned drone, validates a normalized snapshot, checks duplicate identity and counter ordering, writes history/receipt, and advances the latest projection in one transaction. Invalid payloads are logged in their own committed rejection outcome without accepted sample/projection writes. See [TELEMETRY.md](TELEMETRY.md) for the contract and remaining NFR-05 work.

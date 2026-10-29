@@ -17,14 +17,14 @@ type PostgresStore struct {
 }
 
 const columns = `id::text, organisation_id::text, name, vendor, model, serial_number,
- status, last_telemetry_at, created_at, updated_at`
+ status, last_telemetry_at, created_at, updated_at, flight_time_seconds, battery_cycles, fault_flags`
 
 type scanner interface{ Scan(...any) error }
 
 func scanDrone(row scanner) (Drone, error) {
 	var d Drone
 	err := row.Scan(&d.ID, &d.OrganisationID, &d.Name, &d.Vendor, &d.Model, &d.SerialNumber,
-		&d.Status, &d.LastTelemetryAt, &d.CreatedAt, &d.UpdatedAt)
+		&d.Status, &d.LastTelemetryAt, &d.CreatedAt, &d.UpdatedAt, &d.FlightTimeSeconds, &d.BatteryCycles, &d.FaultFlags)
 	d.CreatedAt = d.CreatedAt.UTC()
 	d.UpdatedAt = d.UpdatedAt.UTC()
 	if d.LastTelemetryAt != nil {

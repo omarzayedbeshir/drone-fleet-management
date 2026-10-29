@@ -49,7 +49,7 @@ jobs:
           docker compose exec -T database sh -c
           'exec psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
           < backend/tests/schema.sql
-      - name: Authentication, registry, and audit integration tests
+      - name: Backend database integration tests
         working-directory: backend
         env:
           TEST_DATABASE_URL: postgres://aerosync:aerosync_local@127.0.0.1:5432/aerosync?sslmode=disable
