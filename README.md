@@ -38,7 +38,7 @@ npm run dev
 
 Open http://localhost:5173. Vite proxies `/api` requests to `http://127.0.0.1:8080`. Sign in using a provisioned account. If you open `http://127.0.0.1:5173` instead, change `APP_ORIGIN` to that exact origin.
 
-The API now requires `DATABASE_URL`, a reachable database, and applied migrations. `GET /api/v1/health` remains a public process-liveness check. Fleet data, vendor integrations, and mission workflows are not implemented. See [authentication setup](backend/AUTH.md) to provision the first administrator and accounts for each role.
+The API now requires `DATABASE_URL`, a reachable database, and applied migrations. `GET /api/v1/health` remains a public process-liveness check. The drone registry REST API is implemented; vendor telemetry integrations and mission workflows remain future work. See [the registry API contract](backend/DRONES.md). See [authentication setup](backend/AUTH.md) to provision the first administrator and accounts for each role.
 
 ## Structure
 
@@ -72,6 +72,7 @@ go build ./...
 
 ```sh
 cd frontend
+npm test
 npm run build
 ```
 
@@ -86,13 +87,13 @@ docker compose exec -T database sh -c 'exec psql -X -v ON_ERROR_STOP=1 -U "$POST
 
 These checks use disposable fixtures inside a rolled-back transaction. Run them against a development or test database.
 
-To run the PostgreSQL-backed authentication tests locally:
+To run the PostgreSQL-backed authentication and registry tests locally:
 
 ```sh
 cd backend
-TEST_DATABASE_URL='postgres://aerosync:aerosync_local@localhost:5432/aerosync?sslmode=disable' go test -race ./internal/httpapi -run TestAuthenticationIntegration -count=1
+TEST_DATABASE_URL='postgres://aerosync:aerosync_local@localhost:5432/aerosync?sslmode=disable' go test -race ./internal/httpapi -run 'Test(Authentication|DroneRegistry)Integration' -count=1
 ```
 
-Use a development or test database. Tests create an isolated schema, apply the core/auth migrations, exercise HTTP handlers with the PostgreSQL store, then drop the schema. Without `TEST_DATABASE_URL`, regular Go tests skip these integration checks.
+Use a development or test database. Tests create an isolated schema, apply the application migrations, exercise HTTP handlers with the PostgreSQL store, then drop the schema. Without `TEST_DATABASE_URL`, regular Go tests skip these integration checks.
 
-CI runs the application checks, authentication integration tests, and database migrations/integration checks on pushes and pull requests. Stop the database with `docker compose down`; its named volume persists.
+CI runs the application checks, authentication/registry integration tests, and database migrations/integration checks on pushes and pull requests. Stop the database with `docker compose down`; its named volume persists.

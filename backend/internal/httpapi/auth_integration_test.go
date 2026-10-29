@@ -4,58 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/auth"
-	"golang.org/x/crypto/bcrypt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-	"time"
+
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/auth"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Requires a disposable database. Each run creates and drops an isolated schema.
 func TestAuthenticationIntegration(t *testing.T) {
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		t.Skip("set TEST_DATABASE_URL for PostgreSQL authentication tests")
-	}
 	ctx := context.Background()
-	base, err := pgxpool.New(ctx, url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer base.Close()
-	schema := fmt.Sprintf("auth_test_%d", time.Now().UnixNano())
-	if _, err := base.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if _, err := base.Exec(ctx, "DROP SCHEMA "+schema+" CASCADE"); err != nil {
-			t.Error(err)
-		}
-	}()
-	config, err := pgxpool.ParseConfig(url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pool.Close()
-	for _, migration := range []string{"000002_core_schema.sql", "000003_auth_sessions.sql"} {
-		sql, err := os.ReadFile(filepath.Join("..", "..", "migrations", migration))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := pool.Exec(ctx, string(sql)); err != nil {
-			t.Fatal(err)
-		}
-	}
+	pool := newIntegrationPool(t)
 	exec := func(sql string, args ...any) {
 		t.Helper()
 		if _, err := pool.Exec(ctx, sql, args...); err != nil {

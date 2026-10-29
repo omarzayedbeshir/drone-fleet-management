@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { AUTH_ACTIVITY_EVENT, ApiError, request, type Role, type User } from './api';
+import { DroneRegistry } from './DroneRegistry';
+import { AUTH_ACTIVITY_EVENT, AUTH_EXPIRED_EVENT, ApiError, request, type Role, type User } from './api';
 
 const roles: Record<Role, { label: string; description: string; areas: string[] }> = {
   system_administrator: {
@@ -60,10 +61,16 @@ export function App() {
     return () => { window.clearTimeout(timer); window.removeEventListener(AUTH_ACTIVITY_EVENT, resetTimer); };
   }, [user]);
 
+  useEffect(() => {
+    const expired = () => { setUser(null); setNotice('Your session has expired. Sign in again.'); };
+    window.addEventListener(AUTH_EXPIRED_EVENT, expired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, expired);
+  }, []);
+
   function signedOut(text: string) { setUser(null); setNotice(text); }
 
   return (
-    <main>
+    <main className={user ? 'app-main' : undefined}>
       <header>
         <p className="eyebrow">Drone Fleet Management</p>
         <h1>AeroSync</h1>
@@ -141,8 +148,10 @@ function Workspace({ user, signedOut }: { user: User; signedOut: (text: string) 
         <button className="secondary" onClick={logout} disabled={busy}>{busy ? 'Signing out…' : 'Sign out'}</button>
       </div>
       <p className="account">{user.email}</p>
-      <h3>Your workspace</h3>
-      <ul className="areas">{role.areas.map(area => <li key={area}>{area}<span>Coming soon</span></li>)}</ul>
+      {user.role === 'system_administrator' ? <>
+        <h3>Your workspace</h3>
+        <ul className="areas">{role.areas.map(area => <li key={area}>{area}<span>Coming soon</span></li>)}</ul>
+      </> : <DroneRegistry canManage={user.role === 'fleet_manager'} />}
       <p className="muted">Sessions expire after 30 minutes of inactivity.</p>
       {error && <p role="alert" className="error">{error}</p>}
       <button className="secondary" aria-expanded={showPassword} aria-controls="password-panel"

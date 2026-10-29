@@ -48,6 +48,9 @@ func NewAuthenticatedHandler(config AuthConfig) (http.Handler, error) {
 	mux.HandleFunc("POST /api/v1/auth/logout", a.sameOrigin(a.logout))
 	mux.HandleFunc("GET /api/v1/auth/me", a.authenticated(a.me))
 	mux.HandleFunc("POST /api/v1/auth/password", a.sameOrigin(a.authenticated(a.changePassword)))
+	if config.Registry != nil {
+		registerDrones(mux, a, config.Registry)
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Cache-Control", "no-store")

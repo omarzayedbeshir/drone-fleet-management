@@ -27,3 +27,85 @@ button:hover:not(:disabled) { filter: brightness(1.1); }
 .areas span, .muted { color: #a9b9cd; font-size: .9rem; }
 .password-form { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid #475569; max-width: 32rem; }
 .password-form h3, .password-form p { margin: 0; }
+
+/* Registry workspace */
+.app-main { width: min(100% - 3rem, 86rem); margin: 2rem auto; }
+.app-main > header h1 { font-size: 2.4rem; margin: .25rem 0; }
+.app-main > header .intro { font-size: 1rem; margin: .4rem 0; }
+.app-main > header .eyebrow { margin-bottom: .4rem; }
+.app-main .workspace-heading h2 { font-size: 1.35rem; }
+.app-main .workspace-heading p { margin: .3rem 0; }
+.app-main .account { font-size: .9rem; margin-top: .5rem; }
+.registry { border-top: 1px solid #475569; margin-top: 1.5rem; padding-top: 1.5rem; }
+.registry-heading { display: flex; justify-content: space-between; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
+.registry-heading h3 { font-size: 1.7rem; margin: .2rem 0; }
+.registry-heading p { margin: .3rem 0; }
+.registry-heading .eyebrow { font-size: .75rem; }
+.registry-filters { display: flex; flex-direction: row; flex-wrap: wrap; align-items: end; gap: .8rem; padding: 1.25rem 0; }
+.registry-filters > div { min-width: 9rem; flex: 1; }
+.registry-filters .search-field { flex: 2; min-width: 15rem; }
+.registry-filters label { display: block; font-size: .85rem; margin: 0 0 .35rem; }
+.registry-filters button { margin-top: 0; }
+select { min-height: 2.9rem; font: inherit; color: #f8fafc; background: #111827; border: 1px solid #64748b; border-radius: .4rem; padding: .55rem .75rem; width: 100%; }
+select:disabled { opacity: .65; }
+.registry-content { border: 1px solid #37475c; border-radius: .5rem; overflow: hidden; }
+.registry-state { padding: 2.5rem 1.5rem; text-align: center; margin: 0; }
+.registry-state h4 { font-size: 1.2rem; margin: 0; }
+.table-scroll { overflow: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+th, td { padding: 1rem; text-align: start; border-bottom: 1px solid #37475c; vertical-align: middle; }
+thead th { background: #111827; color: #bac9da; font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
+tbody tr:last-child > * { border-bottom: 0; }
+tbody tr:hover { background: #1c2b40; }
+.aircraft-name { display: block; min-width: 9rem; max-width: 22rem; overflow-wrap: anywhere; }
+.aircraft-model { display: block; font-weight: 400; color: #a9b9cd; font-size: .85rem; max-width: 22rem; overflow-wrap: anywhere; }
+.serial { overflow-wrap: anywhere; min-width: 8rem; max-width: 16rem; }
+.row-actions { display: flex; gap: .2rem; align-items: center; }
+button.text-button { background: transparent; color: #5eead4; padding: .45rem .6rem; font-size: .9rem; }
+button.danger-text { color: #fda4af; }
+button.danger { color: #fff; background: #b42341; }
+.status-badge { display: inline-flex; align-items: center; padding: .2rem .6rem; border-radius: 2rem; white-space: nowrap; font-size: .8rem; font-weight: 600; background: #334155; color: #e2e8f0; }
+.status-available { background: #134e4a; color: #99f6e4; }
+.status-charging { background: #713f12; color: #fef08a; }
+.status-in_mission { background: #1e3a8a; color: #bfdbfe; }
+.status-grounded { background: #7f1d1d; color: #fecaca; }
+.pagination { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; padding: .8rem 1rem; border-top: 1px solid #37475c; background: #111827; }
+.pagination p { margin: 0; font-size: .85rem; }
+.page-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; }
+.page-controls label { margin: 0; font-size: .85rem; }
+.page-controls select { width: 5rem; }
+.page-controls button { font-size: .85rem; }
+.success { color: #99f6e4; padding: .75rem 1rem; background: #123c39; border-radius: .4rem; }
+.registry-dialog { color: #e5e7eb; background: #172033; border: 1px solid #64748b; border-radius: .8rem; padding: 1.5rem; width: min(36rem, calc(100vw - 2rem)); max-height: calc(100dvh - 3rem); overflow: auto; }
+.registry-dialog::backdrop { background: rgb(3 7 18 / .78); }
+.dialog-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.dialog-heading h2 { margin: .35rem 0 0; }
+.dialog-heading button { flex-shrink: 0; }
+.dialog-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: .7rem; margin-top: 1.25rem; }
+.dialog-actions button { margin: 0; }
+.detail-name { font-size: 1.4rem; color: #f8fafc; font-weight: 650; overflow-wrap: anywhere; }
+.drone-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem; }
+.drone-details dt { color: #a9b9cd; font-size: .85rem; }
+.drone-details dd { margin: .3rem 0 0; overflow-wrap: anywhere; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@media (max-width: 600px) {
+  .app-main { width: calc(100% - 1.25rem); margin: 1rem auto; }
+  .registry-heading > button { width: 100%; }
+  .registry-filters .search-field { min-width: 100%; }
+  .registry-filters > button[type=submit] { flex: 1; }
+  .pagination { align-items: flex-start; }
+  .page-controls { width: 100%; }
+  .registry-dialog { padding: 1.2rem; }
+  .drone-details { grid-template-columns: 1fr; }
+}
+/* Keep the fleet visible without spending the first screen on the account header. */
+.app-main > header { display: grid; grid-template-columns: auto 1fr; column-gap: 1.5rem; }
+.app-main > header .eyebrow { grid-column: 1; margin: 0; font-size: .7rem; }
+.app-main > header h1 { grid-column: 1; font-size: 2rem; }
+.app-main > header .intro { grid-column: 2; grid-row: 1 / span 2; align-self: center; justify-self: end; }
+.app-main > .panel { margin-top: 1rem; padding: 1.25rem; }
+.registry { margin-top: 1rem; padding-top: 1rem; }
+@media (max-width: 600px) {
+  .app-main > header .intro { display: none; }
+  .app-main > .panel { padding: 1rem; }
+}

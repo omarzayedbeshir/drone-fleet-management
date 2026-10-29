@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/auth"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/drones"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -20,6 +21,7 @@ const cookieName = "aerosync_session"
 
 type AuthConfig struct {
 	Store         auth.Store
+	Registry      drones.Store
 	Origin        string
 	SecureCookies bool
 }

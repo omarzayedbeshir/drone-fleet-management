@@ -19,6 +19,7 @@ System administrators are the exception: they have no organisation. Every other 
 | `organisations` | UUID, trimmed nonempty name, creation and update timestamps. Names need not be globally unique. |
 | `users` | UUID, organisation, name, canonical globally unique email, password hash, role, active flag, timestamps. |
 | `drones` | UUID, organisation, name, vendor, model, serial number, status, last telemetry timestamp, timestamps. |
+| `drone_registry_events` | Append-only registry audit events with actor, drone ID, action, before/after snapshots, and timestamp. |
 | `auth_sessions` | SHA-256 token hash, user, creation/last-activity timestamps, absolute expiry. |
 | `schema_migrations` | Migration filename without extension, SQL checksum, application timestamp. Managed by the runner. |
 
@@ -40,7 +41,7 @@ Tenant foreign keys and indexes establish ownership; they do **not** enforce cal
 
 Future tables that reference a tenant-owned user or drone should carry `organisation_id` and use composite foreign keys to prevent cross-tenant relationships. Add the corresponding `(organisation_id, id)` unique keys when those relationships are introduced.
 
-Telemetry hypertables, mission assignments, maintenance records, append-only audit events, and AI preferences are intentionally deferred. This migration does not implement the full requirements model.
+Telemetry hypertables, mission assignments, maintenance records, audit coverage for future workflows, and AI preferences are intentionally deferred. This migration does not implement the full requirements model.
 
 ## Migration operation
 
@@ -53,3 +54,7 @@ The Compose database role is a local development owner. Production application c
 Migration `000003_auth_sessions.sql` adds database-backed sessions. Only SHA-256 hashes of cryptographically random 256-bit tokens are stored. Session lookup checks the current active user, enforces a 30-minute idle timeout and a 24-hour absolute lifetime, and advances `last_seen_at`. Password, role, organisation, or active-flag changes delete all sessions through a database trigger. Deleting a user cascades to their sessions. Expired sessions for a user are pruned on their next successful login; inactive accounts' expired rows can also be removed with the maintenance query in [AUTH.md](AUTH.md).
 
 The API now supplies shared authentication/role middleware and derives the current organisation from the database session. Future tenant endpoints must use that authenticated context and apply it to every query; the schema does not supply row-level security.
+
+## Drone registry audit
+
+Migration `000004_drone_registry_audit.sql` adds `drone_registry_events`. Drone creation, metadata updates, and deletion commit atomically with their audit events. The event stores the server-authenticated actor ID, organisation, drone ID, action, UTC drone snapshots before/after, and a server timestamp. Actor and drone IDs deliberately have no foreign keys: events survive account/drone removal without mutating history. The organisation foreign key cascades when the organisation is removed. A trigger rejects ordinary UPDATE/DELETE on audit rows and permits organisation-deletion cascades. Database owners can bypass triggers, so production privileges still require separate provisioning. No audit HTTP endpoint or automated retention purge is introduced.
