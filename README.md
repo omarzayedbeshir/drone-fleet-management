@@ -97,3 +97,7 @@ TEST_DATABASE_URL='postgres://aerosync:aerosync_local@localhost:5432/aerosync?ss
 Use a development or test database. Tests create an isolated schema, apply the application migrations, exercise HTTP handlers with the PostgreSQL store, then drop the schema. Without `TEST_DATABASE_URL`, regular Go tests skip these integration checks.
 
 CI runs the application checks, authentication/registry/audit/telemetry integration tests, and database migrations/integration checks on pushes and pull requests. Stop the database with `docker compose down`; its named volume persists.
+
+## OpenAPI draft
+
+[backend/openapi.yaml](backend/openapi.yaml) documents the implemented REST/JSON API for NFR-08, including cookie authentication, roles, registry operations, and normalized telemetry. It references the common telemetry schema and clearly identifies remaining NFR-08 work. See [API documentation and validation instructions](backend/API.md). CI validates the specification, examples, route coverage, and DTO/schema field alignment.

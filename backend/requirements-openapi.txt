@@ -1,0 +1,4 @@
+# Documentation validation only; not required by the Go API.
+openapi-spec-validator==0.7.2
+PyYAML==6.0.2
+jsonschema==4.23.0

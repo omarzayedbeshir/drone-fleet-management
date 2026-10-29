@@ -12,7 +12,7 @@ Apply migrations through `000006_telemetry_ingestion.sql` before starting the up
 
 ## Common schema
 
-The machine-readable contract is [schemas/telemetry.schema.json](schemas/telemetry.schema.json). Example:
+The machine-readable contract is [schemas/telemetry.schema.json](schemas/telemetry.schema.json), referenced by the [OpenAPI draft](openapi.yaml). Example:
 
 ```json
 {

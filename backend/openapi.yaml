@@ -1,0 +1,1347 @@
+# AeroSync OpenAPI draft. Validate with scripts/validate_openapi.py.
+openapi: 3.1.1
+info:
+  title: AeroSync REST API
+  version: 0.1.0-draft
+  description: |-
+    Draft for NFR-08: implemented REST/JSON operations only. Canonical telemetry uses SI units and ISO 8601/RFC3339 UTC responses. Relative references reuse the common JSON Schema. Schemas describe canonical values; normalization, UTF-8 byte lengths, permissions, timestamp tolerance, and transactional/stateful rules are documented per operation.
+
+    All tenant ownership comes from the authenticated session. Administrators have no tenant and cannot access registry/telemetry operations. x-allowed-roles documents application roles; it is not an OAuth scope system.
+
+    Cookie sessions expire after 30 minutes without an authenticated API request and after 24 hours absolutely. Password/role/organisation/active-status changes revoke sessions. Mutations require the exact configured Origin and reject cross-site fetch metadata. CORS is not enabled; use a same-origin frontend/API proxy. Production requires HTTPS and Secure cookies. API errors use JSON; framework-generated unmatched-route/method errors may be plain text and are outside the defined operations.
+
+    CSV/PDF export endpoints and live vendor adapters are not implemented. CSV is a test/fallback ingestion source, not a supported vendor. This draft alone does not establish full NFR-08 compliance.
+servers:
+- url: http://localhost:5173
+  description: Development frontend proxy; requires APP_ORIGIN=http://localhost:5173.
+- url: http://127.0.0.1:8080
+  description: Direct local API for non-browser tooling; mutation Origin must still match APP_ORIGIN. Production
+    base URL is deployment-specific HTTPS.
+tags:
+- name: Health
+  description: Public process liveness.
+- name: Authentication
+  description: Session authentication for all four human roles.
+- name: Registry
+  description: Organisation-scoped drone metadata and read-only projections.
+- name: Telemetry
+  description: Normalized manual ingestion and accepted observation history.
+security:
+- SessionCookie: []
+paths:
+  /api/v1/health:
+    get:
+      operationId: getHealth
+      tags:
+      - Health
+      summary: Check process liveness
+      description: Public liveness only. A successful response does not prove database readiness or migration state.
+      x-implementation-status: implemented
+      x-allowed-roles:
+      - anonymous
+      - system_administrator
+      - fleet_manager
+      - pilot
+      - maintenance_technician
+      security: []
+      responses:
+        '200':
+          description: API process is running.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - status
+                - service
+                properties:
+                  status:
+                    const: ok
+                    type: string
+                  service:
+                    const: aerosync-api
+                    type: string
+              example:
+                status: ok
+                service: aerosync-api
+          headers:
+            Cache-Control:
+              description: Responses with JSON bodies and authenticated-handler responses are not cached.
+              schema:
+                type: string
+                const: no-store
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      tags:
+      - Authentication
+      summary: Sign in
+      description: All human roles use the same endpoint. Unknown accounts, inactive accounts, and wrong passwords
+        use the same 401 response. Successful re-login rotates the browser’s previous session. Requires an exact
+        Origin before credential processing.
+      x-implementation-status: implemented
+      x-allowed-roles:
+      - system_administrator
+      - fleet_manager
+      - pilot
+      - maintenance_technician
+      security: []
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: manager@example.test
+              password: example-login-password-123
+      responses:
+        '200':
+          description: Authenticated; session cookie issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                user:
+                  id: 48e472cd-2b80-4698-8fb4-556c9e8e3e76
+                  organisation_id: a4052e23-8b0f-49b3-bb88-9009b27e7ddc
+                  name: Fleet Manager
+                  email: manager@example.test
+                  role: fleet_manager
+          headers:
+            Set-Cookie:
+              description: Host-only opaque session cookie. HttpOnly, SameSite=Strict, Path=/api. Secure in production;
+                omitted only for configured localhost development. Password changes/logout clear it.
+              schema:
+                type: string
+            Cache-Control:
+              description: Responses with JSON bodies and authenticated-handler responses are not cached.
+              schema:
+                type: string
+                const: no-store
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+      x-max-body-bytes: 4096
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      tags:
+      - Authentication
+      summary: Sign out
+      description: Optional session cookie. Idempotent for missing/expired sessions; revokes a supplied valid token
+        and clears the browser cookie. Origin is still mandatory. Request body is ignored.
+      x-implementation-status: implemented
+      x-allowed-roles:
+      - system_administrator
+      - fleet_manager
+      - pilot
+      - maintenance_technician
+      security: []
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      responses:
+        '204':
+          description: Session revoked where present; cookie cleared.
+          headers:
+            Set-Cookie:
+              description: Host-only opaque session cookie. HttpOnly, SameSite=Strict, Path=/api. Secure in production;
+                omitted only for configured localhost development. Password changes/logout clear it.
+              schema:
+                type: string
+            Cache-Control:
+              description: Responses with JSON bodies and authenticated-handler responses are not cached.
+              schema:
+                type: string
+                const: no-store
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /api/v1/auth/me:
+    get:
+      operationId: getCurrentUser
+      tags:
+      - Authentication
+      summary: Get the signed-in user
+      description: Resolves current active account, role, and organisation from the database; never accepts client-supplied
+        identity or tenant claims.
+      x-implementation-status: implemented
+      x-allowed-roles:
+      - system_administrator
+      - fleet_manager
+      - pilot
+      - maintenance_technician
+      responses:
+        '200':
+          description: Current user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                user:
+                  id: 48e472cd-2b80-4698-8fb4-556c9e8e3e76
+                  organisation_id: a4052e23-8b0f-49b3-bb88-9009b27e7ddc
+                  name: Fleet Manager
+                  email: manager@example.test
+                  role: fleet_manager
+          headers:
+            Cache-Control:
+              description: Responses with JSON bodies and authenticated-handler responses are not cached.
+              schema:
+                type: string
+                const: no-store
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /api/v1/auth/password:
+    post:
+      operationId: changePassword
+      tags:
+      - Authentication
+      summary: Change your password
+      description: Verifies the current password and changes it atomically. Success revokes all sessions and clears
+        the cookie; sign in again. Incorrect current password, unchanged new password, or invalid new byte length
+        returns 400 without changing credentials.
+      x-implementation-status: implemented
+      x-allowed-roles:
+      - system_administrator
+      - fleet_manager
+      - pilot
+      - maintenance_technician
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+            example:
+              current_password: example-current-password-123
+              new_password: example-replacement-password-456
+      responses:
+        '204':
+          description: Password changed; all sessions revoked; cookie cleared.
+          headers:
+            Set-Cookie:
+              description: Host-only opaque session cookie. HttpOnly, SameSite=Strict, Path=/api. Secure in production;
+                omitted only for configured localhost development. Password changes/logout clear it.
+              schema:
+                type: string
+            Cache-Control:
+              description: Responses with JSON bodies and authenticated-handler responses are not cached.
+              schema:
+                type: string
+                const: no-store
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/AuthUnavailable'
+      x-max-body-bytes: 4096
+  /api/v1/drones:
+    get:
+      operationId: listDrones
+      tags:
+      - Registry
+      summary: List registered drones
+      description: Tenant-scoped listing ordered by created_at descending, then UUID descending. Unknown/repeated
+        query parameters are rejected. Empty results are an empty array, never null.
+      x-implementation-status: implemented
+      x-allowed-roles:
+      - fleet_manager
+      - pilot
+      - maintenance_technician
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Offset'
+      - $ref: '#/components/parameters/VendorFilter'
+      - $ref: '#/components/parameters/StatusFilter'
+      - $ref: '#/components/parameters/Search'
+      responses:
+        '200':
+          description: Page of registered drones.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DronePage'
+              example:
+                drones:
+                - id: 8cc0cc3e-d347-4cff-bb0f-156d7bc865f6
+                  organisation_id: a4052e23-8b0f-49b3-bb88-9009b27e7ddc
+                  name: Survey 01
+                  vendor: dji
+                  model: Mavic 3 Enterprise
+                  serial_number: DJI-0001
+                  status: unknown
+                  flight_time_seconds: 0
+                  battery_cycles: 0
+                  fault_flags: []
+                  last_telemetry_at: null
+                  created_at: '2026-10-29T07:00:00Z'
+                  updated_at: '2026-10-29T07:00:00Z'
+                pagination:
+                  limit: 20
+                  offset: 0
+                  has_more: false
+          headers:
+            Cache-Control:
+              description: Responses with JSON bodies and authenticated-handler responses are not cached.
+              schema:
+                type: string
+                const: no-store
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: createDrone
+      tags:
+      - Registry
+      summary: Register a drone
+      description: Fleet managers only. New status is unknown, counters zero, faults empty, telemetry timestamp
+        null. Duplicate tenant/vendor/serial identity returns 409. Registry change and audit event commit together.
+      x-implementation-status: implemented
+      x-allowed-roles:
+      - fleet_manager
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DroneCreate'
+            example:
+              name: Survey 01
+              vendor: dji
+              model: Mavic 3 Enterprise
+              serial_number: DJI-0001
+      responses:
+        '201':
+          description: Drone registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DroneResponse'
+              example:
+                drone:
+                  id: 8cc0cc3e-d347-4cff-bb0f-156d7bc865f6
+                  organisation_id: a4052e23-8b0f-49b3-bb88-9009b27e7ddc
+                  name: Survey 01
+                  vendor: dji
+                  model: Mavic 3 Enterprise
+                  serial_number: DJI-0001
+                  status: unknown
+                  flight_time_seconds: 0
+                  battery_cycles: 0
+                  fault_flags: []
+                  last_telemetry_at: null
+                  created_at: '2026-10-29T07:00:00Z'
+                  updated_at: '2026-10-29T07:00:00Z'
+          headers:
+            Location:
+              description: Relative URI of the new drone.
+              schema:
+                type: string
+              example: /api/v1/drones/8cc0cc3e-d347-4cff-bb0f-156d7bc865f6
+            Cache-Control:
+              description: Responses with JSON bodies and authenticated-handler responses are not cached.
+              schema:
+                type: string
+                const: no-store
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-max-body-bytes: 4096
+  /api/v1/drones/{id}:
+    parameters:
+    - $ref: '#/components/parameters/DroneID'
+    get:
+      operationId: getDrone
+      tags:
+      - Registry
+      summary: Get a drone
+      description: Returns only a drone in the caller’s organisation. Status/counters/faults/timestamps are read-only
+        projections.
+      x-implementation-status: implemented
+      x-allowed-roles:
+      - fleet_manager
+      - pilot
+      - maintenance_technician
+      responses:
+        '200':
+          description: Drone details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DroneResponse'
+              example:
+                drone:
+                  id: 8cc0cc3e-d347-4cff-bb0f-156d7bc865f6
+                  organisation_id: a4052e23-8b0f-49b3-bb88-9009b27e7ddc
+                  name: Survey 01
+                  vendor: dji
+                  model: Mavic 3 Enterprise
+                  serial_number: DJI-0001
+                  status: unknown
+                  flight_time_seconds: 0
+                  battery_cycles: 0
+                  fault_flags: []
+                  last_telemetry_at: null
+                  created_at: '2026-10-29T07:00:00Z'
+                  updated_at: '2026-10-29T07:00:00Z'
+          headers:
+            Cache-Control:
+              description: Responses with JSON bodies and authenticated-handler responses are not cached.
+              schema:
+                type: string
+                const: no-store
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    patch:
+      operationId: updateDrone
+      tags:
+      - Registry
+      summary: Edit drone metadata
+      description: Fleet managers only. Partial metadata edit; omitted fields are preserved. Identity/organisation/status/counters/faults/timestamps
+        cannot be patched. Row lock prevents disjoint concurrent patches overwriting omitted fields. Audit failure
+        rolls back the edit.
+      x-implementation-status: implemented
+      x-allowed-roles:
+      - fleet_manager
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DronePatch'
+            example:
+              name: Survey 01 — North team
+      responses:
+        '200':
+          description: Updated drone.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DroneResponse'
+              example:
+                drone:
+                  id: 8cc0cc3e-d347-4cff-bb0f-156d7bc865f6
+                  organisation_id: a4052e23-8b0f-49b3-bb88-9009b27e7ddc
+                  name: Survey 01 — North team
+                  vendor: dji
+                  model: Mavic 3 Enterprise
+                  serial_number: DJI-0001
+                  status: unknown
+                  flight_time_seconds: 0
+                  battery_cycles: 0
+                  fault_flags: []
+                  last_telemetry_at: null
+                  created_at: '2026-10-29T07:00:00Z'
+                  updated_at: '2026-10-29T07:00:00Z'
+          headers:
+            Cache-Control:
+              description: Responses with JSON bodies and authenticated-handler responses are not cached.
+              schema:
+                type: string
+                const: no-store
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-max-body-bytes: 4096
+    delete:
+      operationId: deleteDrone
+      tags:
+      - Registry
+      summary: Remove a drone registration
+      description: Fleet managers only. Existing audit history remains. Accepted telemetry prevents deletion with
+        409; the deletion audit entry also rolls back. Repeating deletion of a missing registration returns 404.
+        Request body is ignored.
+      x-implementation-status: implemented
+      x-allowed-roles:
+      - fleet_manager
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      responses:
+        '204':
+          description: Registration removed; audit history retained.
+          headers:
+            Cache-Control:
+              description: Responses with JSON bodies and authenticated-handler responses are not cached.
+              schema:
+                type: string
+                const: no-store
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /api/v1/drones/{id}/telemetry:
+    parameters:
+    - $ref: '#/components/parameters/DroneID'
+    get:
+      operationId: listTelemetry
+      tags:
+      - Telemetry
+      summary: Read drone telemetry history
+      description: Tenant-scoped canonical observations ordered by observed_at descending. Unknown/repeated query
+        parameters are rejected.
+      x-implementation-status: implemented
+      x-allowed-roles:
+      - fleet_manager
+      - pilot
+      - maintenance_technician
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Page of observations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryPage'
+              example:
+                samples:
+                - event_id: flight-42-sample-17
+                  source: dji
+                  observed_at: '2026-10-29T07:00:00Z'
+                  status: available
+                  flight_time_seconds: 7200
+                  battery_cycles: 12
+                  fault_flags: []
+                  battery_percent: 85
+                  latitude: 30.0444
+                  longitude: 31.2357
+                  altitude_m: 120
+                  speed_mps: 4.5
+                  received_at: '2026-10-29T07:00:01Z'
+                pagination:
+                  limit: 20
+                  offset: 0
+                  has_more: false
+          headers:
+            Cache-Control:
+              description: Responses with JSON bodies and authenticated-handler responses are not cached.
+              schema:
+                type: string
+                const: no-store
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: ingestTelemetry
+      tags:
+      - Telemetry
+      summary: Ingest one normalized telemetry observation
+      description: Fleet-manager manual/testing endpoint, not a public vendor webhook. Source must match the registered
+        vendor except csv fallback. Identity is tenant/drone/source/event_id across all time chunks. Exact canonical
+        retries return 200 without changing freshness or counters; changed content under the same ID or another
+        event at the same drone timestamp returns 409. Delayed observations must fit monotonic counters between
+        both temporal neighbours and do not replace newer projections. Latest updates preserve existing grounding.
+        Observation, receipt, and projection commit together. Invalid submissions to an owned drone are durably
+        logged as reason codes and received-byte hashes (no raw imagery/payload); logging failure returns 503. Transport/authentication/origin
+        failures are not rejection records. No adapter polling, bounded queue, freshness-expiry worker, or maintenance
+        action is implied.
+      x-implementation-status: implemented
+      x-allowed-roles:
+      - fleet_manager
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NormalizedTelemetry'
+            example:
+              event_id: flight-42-sample-17
+              source: dji
+              observed_at: '2026-10-29T07:00:00Z'
+              status: available
+              flight_time_seconds: 7200
+              battery_cycles: 12
+              fault_flags: []
+              battery_percent: 85
+              latitude: 30.0444
+              longitude: 31.2357
+              altitude_m: 120
+              speed_mps: 4.5
+      responses:
+        '201':
+          description: Fresh observation accepted; latest_updated may be false for delayed history.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryResult'
+              example:
+                duplicate: false
+                latest_updated: true
+                sample:
+                  event_id: flight-42-sample-17
+                  source: dji
+                  observed_at: '2026-10-29T07:00:00Z'
+                  status: available
+                  flight_time_seconds: 7200
+                  battery_cycles: 12
+                  fault_flags: []
+                  battery_percent: 85
+                  latitude: 30.0444
+                  longitude: 31.2357
+                  altitude_m: 120
+                  speed_mps: 4.5
+                  received_at: '2026-10-29T07:00:01Z'
+          headers:
+            Cache-Control:
+              description: Responses with JSON bodies and authenticated-handler responses are not cached.
+              schema:
+                type: string
+                const: no-store
+        '200':
+          description: Exact retry of an accepted canonical observation; no new writes or projection update.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryResult'
+              example:
+                duplicate: true
+                latest_updated: false
+                sample:
+                  event_id: flight-42-sample-17
+                  source: dji
+                  observed_at: '2026-10-29T07:00:00Z'
+                  status: available
+                  flight_time_seconds: 7200
+                  battery_cycles: 12
+                  fault_flags: []
+                  battery_percent: 85
+                  latitude: 30.0444
+                  longitude: 31.2357
+                  altitude_m: 120
+                  speed_mps: 4.5
+                  received_at: '2026-10-29T07:00:01Z'
+          headers:
+            Cache-Control:
+              description: Responses with JSON bodies and authenticated-handler responses are not cached.
+              schema:
+                type: string
+                const: no-store
+        '409':
+          description: Conflicting source-event content or occupied drone observation time. Rejection logged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryError'
+              example:
+                error: event_id was already used with different telemetry
+                code: event_conflict
+          headers:
+            Cache-Control:
+              description: Responses with JSON bodies and authenticated-handler responses are not cached.
+              schema:
+                type: string
+                const: no-store
+        '413':
+          description: Body exceeds 16 KiB; bounded-prefix rejection digest logged for the owned drone.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryError'
+              example:
+                error: Telemetry body exceeds 16 KiB
+                code: body_too_large
+          headers:
+            Cache-Control:
+              description: Responses with JSON bodies and authenticated-handler responses are not cached.
+              schema:
+                type: string
+                const: no-store
+        '422':
+          description: Malformed/extra/unknown JSON, missing fields, invalid ranges/time, source mismatch, or counter
+            regression. Rejection logged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryError'
+              example:
+                error: Cumulative counters contradict accepted telemetry history
+                code: counter_regression
+          headers:
+            Cache-Control:
+              description: Responses with JSON bodies and authenticated-handler responses are not cached.
+              schema:
+                type: string
+                const: no-store
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-max-body-bytes: 16384
+components:
+  securitySchemes:
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: aerosync_session
+      description: Opaque server-side session token issued by login. Use cookie storage; never localStorage or client-generated
+        role/tenant claims. HttpOnly, SameSite=Strict, Path=/api; Secure in production.
+  parameters:
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      description: Exact configured APP_ORIGIN, including scheme and port, without a trailing slash. Browser-generated;
+        clients cannot choose arbitrary origins. No CORS access is enabled. Cross-site fetch metadata is rejected
+        even when this value matches.
+      schema:
+        type: string
+        format: uri
+      example: http://localhost:5173
+    DroneID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Canonical UUID of a drone in the authenticated organisation.
+      example: 8cc0cc3e-d347-4cff-bb0f-156d7bc865f6
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      description: Page size. Must not be repeated.
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        maximum: 1000000
+        default: 0
+      description: Rows to skip. Must not be repeated; offset pages may shift after concurrent insertions/deletions.
+    VendorFilter:
+      name: vendor
+      in: query
+      schema:
+        $ref: '#/components/schemas/Vendor'
+      description: Exact normalized vendor code; at most once.
+    StatusFilter:
+      name: status
+      in: query
+      schema:
+        $ref: '#/components/schemas/DroneStatus'
+      description: Exact stored operational status; at most once. No automatic stale-status expiry is implemented
+        yet.
+    Search:
+      name: q
+      in: query
+      schema:
+        type: string
+        maxLength: 200
+      description: Trimmed, case-insensitive literal substring across name/model/serial. Percent, underscore, and
+        backslash are literal; NUL is rejected. At most once.
+  responses:
+    BadRequest:
+      description: Invalid request body, UUID, or query parameters. Registry/auth JSON parsing and their 4 KiB body-limit
+        failures return 400.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Invalid request body
+    Unauthorized:
+      description: Missing, expired, revoked, or invalid session. Login also uses 401 for unknown/inactive accounts
+        and incorrect credentials.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Sign in to continue
+      headers:
+        Set-Cookie:
+          description: Host-only opaque session cookie. HttpOnly, SameSite=Strict, Path=/api. Secure in production;
+            omitted only for configured localhost development. Password changes/logout clear it.
+          schema:
+            type: string
+    Forbidden:
+      description: 'Role denied, invalid account scope, missing/disallowed Origin, or Sec-Fetch-Site: cross-site.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Your role cannot access this resource
+    NotFound:
+      description: Drone missing from the authenticated organisation. Foreign-organisation IDs deliberately return
+        the same 404.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Drone not found
+    Conflict:
+      description: Duplicate organisation/vendor/serial identity or a related record preventing deletion (including
+        accepted telemetry history).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Drone conflicts with an existing serial number or a related record
+    UnsupportedMediaType:
+      description: Content-Type must be application/json for JSON request bodies.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Content-Type must be application/json
+    TooManyRequests:
+      description: More than 10 login/password attempts per minute from the socket IP, per API process. Forwarded
+        client-IP headers are not trusted.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Too many attempts. Try again in a minute.
+      headers:
+        Retry-After:
+          description: Seconds before retrying. IP throttling uses 60; exhausted password-operation slots use 1.
+            May be absent on storage-related 503 responses.
+          schema:
+            type: string
+            pattern: ^\d+$
+          example: '1'
+    Unavailable:
+      description: Storage unavailable or a required transactional write failed; mutation is not partially committed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Service is temporarily unavailable
+    AuthUnavailable:
+      description: Authentication storage failed or all four concurrent password-operation slots are busy.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Authentication is temporarily unavailable
+      headers:
+        Retry-After:
+          description: Seconds before retrying. IP throttling uses 60; exhausted password-operation slots use 1.
+            May be absent on storage-related 503 responses.
+          schema:
+            type: string
+            pattern: ^\d+$
+          example: '1'
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required:
+      - error
+      properties:
+        error:
+          type: string
+    Role:
+      type: string
+      enum:
+      - system_administrator
+      - fleet_manager
+      - pilot
+      - maintenance_technician
+    Vendor:
+      type: string
+      enum:
+      - dji
+      - ardupilot
+      description: Supported registry vendor codes. CSV is a fallback/test ingestion format, not a vendor.
+    DroneStatus:
+      type: string
+      enum:
+      - available
+      - charging
+      - in_mission
+      - grounded
+      - unknown
+    User:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - organisation_id
+      - name
+      - email
+      - role
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: Null only for system administrators; server-derived for all tenant roles.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: ^[^\x00-\x1f\x7f-\x9f]+$
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/Role'
+      allOf:
+      - if:
+          properties:
+            role:
+              const: system_administrator
+          required:
+          - role
+        then:
+          properties:
+            organisation_id:
+              type: 'null'
+        else:
+          properties:
+            organisation_id:
+              type: string
+              format: uuid
+    UserResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - user
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - email
+      - password
+      properties:
+        email:
+          type: string
+          description: Canonical email recommended. Server trims and lowercases before lookup.
+        password:
+          type: string
+          writeOnly: true
+          description: Existing account password; no new-password minimum is imposed at login. bcrypt input is limited
+            to 72 UTF-8 bytes.
+    PasswordChangeRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - current_password
+      - new_password
+      properties:
+        current_password:
+          type: string
+          writeOnly: true
+        new_password:
+          type: string
+          writeOnly: true
+          description: 12–72 UTF-8 bytes, different from the current password. Byte length is checked by the server,
+            not JSON Schema character length.
+          x-minBytes: 12
+          x-maxBytes: 72
+    DroneCreate:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - vendor
+      - model
+      - serial_number
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: ^[^\x00-\x1f\x7f-\x9f]+$
+        vendor:
+          $ref: '#/components/schemas/Vendor'
+        model:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: ^[^\x00-\x1f\x7f-\x9f]+$
+        serial_number:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: ^[^\x00-\x1f\x7f-\x9f]+$
+          description: Case-sensitive; unique within the authenticated organisation/vendor pair.
+      description: Canonical metadata. Server trims strings and lowercases vendor codes before validating normalized
+        1–200 character values. No client-controlled tenant, status, counters, or telemetry timestamp.
+    DronePatch:
+      type: object
+      additionalProperties: false
+      required: []
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: ^[^\x00-\x1f\x7f-\x9f]+$
+        vendor:
+          $ref: '#/components/schemas/Vendor'
+        model:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: ^[^\x00-\x1f\x7f-\x9f]+$
+        serial_number:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: ^[^\x00-\x1f\x7f-\x9f]+$
+      minProperties: 1
+      description: Nonempty subset of metadata fields. Omitted fields are preserved; null values and operational/identity
+        fields are rejected.
+    Drone:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - organisation_id
+      - name
+      - vendor
+      - model
+      - serial_number
+      - status
+      - flight_time_seconds
+      - battery_cycles
+      - fault_flags
+      - last_telemetry_at
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: ^[^\x00-\x1f\x7f-\x9f]+$
+        vendor:
+          $ref: '#/components/schemas/Vendor'
+        model:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: ^[^\x00-\x1f\x7f-\x9f]+$
+        serial_number:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: ^[^\x00-\x1f\x7f-\x9f]+$
+        status:
+          $ref: '#/components/schemas/DroneStatus'
+        flight_time_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 9223372036854775807
+          description: Cumulative lifetime flight seconds; read-only.
+        battery_cycles:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 9223372036854775807
+          description: Cumulative drone battery-cycle total; read-only, not a per-battery lifecycle record.
+        fault_flags:
+          type: array
+          maxItems: 32
+          items:
+            type: string
+            pattern: ^[A-Za-z0-9_:-]{1,64}$
+        last_telemetry_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: Latest accepted observation instant; null before telemetry. Registry edits do not advance
+            freshness.
+        created_at:
+          type: string
+          format: date-time
+          description: ISO 8601 / RFC3339 instant; server responses use UTC (Z).
+        updated_at:
+          type: string
+          format: date-time
+          description: ISO 8601 / RFC3339 instant; server responses use UTC (Z).
+    DroneResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - drone
+      properties:
+        drone:
+          $ref: '#/components/schemas/Drone'
+    Pagination:
+      type: object
+      additionalProperties: false
+      required:
+      - limit
+      - offset
+      - has_more
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        offset:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+        has_more:
+          type: boolean
+    DronePage:
+      type: object
+      additionalProperties: false
+      required:
+      - drones
+      - pagination
+      properties:
+        drones:
+          type: array
+          items:
+            $ref: '#/components/schemas/Drone'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    NormalizedTelemetry:
+      $ref: ./schemas/telemetry.schema.json
+      description: Shared schema in SI units. Runtime also enforces at most five minutes future clock skew, registered-vendor
+        matching, idempotency, and monotonic counter history. Fault flags are explicit; missing/null counters and
+        fault_flags are invalid.
+    TelemetrySample:
+      type: object
+      additionalProperties: false
+      required:
+      - event_id
+      - source
+      - observed_at
+      - status
+      - flight_time_seconds
+      - battery_cycles
+      - fault_flags
+      - battery_percent
+      - latitude
+      - longitude
+      - altitude_m
+      - speed_mps
+      - received_at
+      properties:
+        event_id:
+          $ref: ./schemas/telemetry.schema.json#/properties/event_id
+        source:
+          $ref: ./schemas/telemetry.schema.json#/properties/source
+        observed_at:
+          $ref: ./schemas/telemetry.schema.json#/properties/observed_at
+        status:
+          $ref: ./schemas/telemetry.schema.json#/properties/status
+        flight_time_seconds:
+          $ref: ./schemas/telemetry.schema.json#/properties/flight_time_seconds
+        battery_cycles:
+          $ref: ./schemas/telemetry.schema.json#/properties/battery_cycles
+        fault_flags:
+          $ref: ./schemas/telemetry.schema.json#/properties/fault_flags
+        battery_percent:
+          $ref: ./schemas/telemetry.schema.json#/properties/battery_percent
+        latitude:
+          $ref: ./schemas/telemetry.schema.json#/properties/latitude
+        longitude:
+          $ref: ./schemas/telemetry.schema.json#/properties/longitude
+        altitude_m:
+          $ref: ./schemas/telemetry.schema.json#/properties/altitude_m
+        speed_mps:
+          $ref: ./schemas/telemetry.schema.json#/properties/speed_mps
+        received_at:
+          type: string
+          format: date-time
+          description: ISO 8601 / RFC3339 instant; server responses use UTC (Z).
+      allOf:
+      - if:
+          required:
+          - latitude
+          properties:
+            latitude:
+              type: number
+        then:
+          required:
+          - longitude
+          properties:
+            longitude:
+              type: number
+      - if:
+          required:
+          - longitude
+          properties:
+            longitude:
+              type: number
+        then:
+          required:
+          - latitude
+          properties:
+            latitude:
+              type: number
+      description: Stored canonical observation. Optional measurements are emitted as null when absent. Times are
+        UTC, truncated to microseconds; fault flags are sorted and deduplicated.
+    TelemetryResult:
+      type: object
+      additionalProperties: false
+      required:
+      - duplicate
+      - latest_updated
+      - sample
+      properties:
+        duplicate:
+          type: boolean
+        latest_updated:
+          type: boolean
+          description: False for exact retries and delayed observations. Existing grounding takes precedence over
+            incoming availability.
+        sample:
+          $ref: '#/components/schemas/TelemetrySample'
+    TelemetryPage:
+      type: object
+      additionalProperties: false
+      required:
+      - samples
+      - pagination
+      properties:
+        samples:
+          type: array
+          items:
+            $ref: '#/components/schemas/TelemetrySample'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    TelemetryError:
+      type: object
+      additionalProperties: false
+      required:
+      - error
+      - code
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          enum:
+          - invalid_sample
+          - event_conflict
+          - timestamp_conflict
+          - vendor_mismatch
+          - counter_regression
+          - body_too_large
+x-nfr-08:
+  implemented:
+  - REST/JSON API draft
+  - Normalized telemetry common schema
+  - SI measurements and UTC response timestamps
+  pending:
+  - CSV/PDF exports
+  - MAVLink/ArduPilot live vehicle or SITL adapter
+  - DJI live adapter or explicitly simulated DJI recordings through a CSV adapter
