@@ -113,8 +113,10 @@ CI runs the application checks, authentication/registry/audit/telemetry integrat
 
 The separate `ardupilot-adapter` process reads a configured MAVLink TCP endpoint or UDP listener and sends normalized observations through the existing ingestion store. It is bound to one ArduPilot drone and an active fleet manager in the same organisation. See [backend/ARDUPILOT.md](backend/ARDUPILOT.md) for simulator launch, binding by email/serial number, field mappings, supported counters, health, and test commands.
 
+Select **Show map** in the registry for stored positions, recent trails and telemetry readings. Automatic refresh every five seconds monitors the current page's aircraft. See [the map guide](frontend/MAP.md) for GPS gaps, timestamps and basemap details.
+
 ## Sprint 1 platform handoff
 
 See [stack and single-node server decisions](docs/ARCHITECTURE.md), [the R-15 spike result](docs/spikes/R15.md), and [the review workflow](docs/REVIEWING.md). `main` requires a pull request and passing backend, frontend, database, and OpenAPI checks. Other contributors need Omar's code-owner approval; Omar has an account-specific review bypass.
 
-For a walkthrough from UI registration to simulated telemetry, use the [SITL demo and troubleshooting guide](docs/SITL_DEMO.md). Registering a drone does not start a connection: the adapter runs separately, and the fleet page requires a refresh to show new readings.
+For a walkthrough from UI registration to simulated telemetry, use the [SITL demo and troubleshooting guide](docs/SITL_DEMO.md). Registering a drone does not start a connection: the adapter runs separately, and the fleet table uses manual refresh while the map offers automatic live polling.

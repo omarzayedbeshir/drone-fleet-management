@@ -1,8 +1,10 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   droneApi, emptyFilters, normalizeMetadata, statusLabels, validateMetadata, vendorLabels,
   type Drone, type DroneFilters, type DroneMetadata, type DronePage, type DroneStatus, type Vendor,
 } from './drones';
+
+const FleetMap = lazy(() => import('./FleetMap').then(module => ({ default: module.FleetMap })));
 
 function message(error: unknown) { return error instanceof Error ? error.message : 'Please try again.'; }
 function date(value: string | null) {
@@ -27,6 +29,7 @@ export function DroneRegistry({ canManage }: { canManage: boolean }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [selection, setSelection] = useState<Selection>(null);
+  const [showMap, setShowMap] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const focusAfterRefresh = useRef(false);
   const hasFilters = Boolean(filters.q || filters.vendor || filters.status);
@@ -34,7 +37,7 @@ export function DroneRegistry({ canManage }: { canManage: boolean }) {
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
-    setLoading(true); setError(''); setPage(null);
+    setLoading(true); setError('');
     droneApi.list(filters, limit, offset, controller.signal)
       .then(data => {
         if (!active) return;
@@ -80,6 +83,7 @@ export function DroneRegistry({ canManage }: { canManage: boolean }) {
           <p>{canManage ? 'Aircraft, registration details, and latest reported status.' : 'Browse your organisation’s registered aircraft. You have read-only access.'}</p>
         </div>
         <div className="registry-actions">
+          <button className="secondary" aria-expanded={showMap} aria-controls="fleet-map-panel" onClick={() => setShowMap(value => !value)}>{showMap ? 'Hide map' : 'Show map'}</button>
           <button className="secondary" disabled={loading} onClick={() => setRefresh(value => value + 1)}>{loading ? 'Refreshing…' : 'Refresh'}</button>
           {canManage && <button onClick={() => setSelection({ mode: 'create' })}><span aria-hidden="true">+ </span>Register drone</button>}
         </div>
@@ -108,6 +112,9 @@ export function DroneRegistry({ canManage }: { canManage: boolean }) {
         {(hasFilters || draft.q || draft.vendor || draft.status) && <button className="text-button" type="button" onClick={clearFilters}>Clear</button>}
       </form>
       {notice && <p className="success" role="status">{notice}</p>}
+      {showMap && <div id="fleet-map-panel">
+        {page?.drones.length ? <Suspense fallback={<p role="status">Loading map…</p>}><FleetMap drones={page.drones} /></Suspense> : <p className="map-notice">{loading ? 'Loading aircraft…' : 'No aircraft on this registry page. Register a drone or adjust your filters.'}</p>}
+      </div>}
       <div className="registry-content" aria-busy={loading}>
         <div className="table-heading"><span>Registered aircraft</span><span className="muted">Latest reported values · Refresh to update</span></div>
         {loading ? <p className="registry-state" role="status">Loading your fleet…</p> : error ? (
