@@ -13,7 +13,8 @@ Mixed-vendor drone fleet management. React + TypeScript + Vite, a Go HTTP API wi
 Start the database and apply migrations from the repository root:
 
 ```sh
-cp .env.example .env
+# First setup only; keep an existing .env and database volume.
+test -f .env || cp .env.example .env
 docker compose up -d --wait database
 ./backend/scripts/migrate.sh
 ```
@@ -22,8 +23,10 @@ Start the API in one terminal:
 
 ```sh
 cd backend
+# First setup only; edit DATABASE_URL to match the root .env/Compose port.
+test -f .env || cp .env.example .env
 set -a
-. ./.env.example
+. ./.env
 set +a
 go run ./cmd/api
 ```
@@ -49,8 +52,9 @@ backend/internal/httpapi/ HTTP routing and handler tests
 backend/migrations/     Versioned database migrations
 backend/scripts/        Migration runner
 backend/tests/          Database integration checks
+docs/                   Architecture, sprint handoff, review workflow and spike evidence
 compose.yaml            Local TimescaleDB service
-.github/workflows/      Frontend and backend CI
+.github/workflows/      Backend, frontend, database and OpenAPI CI
 ```
 
 `API_ADDR` overrides the API listen address. Export backend environment variables in your shell; Go does not automatically read `.env`. See `backend/.env.example` for local database and authentication settings. The example credentials match the default Compose configuration; adjust them if your `.env` differs. If the API port changes, set `API_PROXY_TARGET` when starting Vite (for example, `API_PROXY_TARGET=http://127.0.0.1:8081 npm run dev`). Production hosting must serve the frontend and proxy `/api` to the backend on the same origin.
@@ -91,7 +95,10 @@ To run the PostgreSQL-backed authentication, registry, audit, and telemetry test
 
 ```sh
 cd backend
-TEST_DATABASE_URL='postgres://aerosync:aerosync_local@localhost:5432/aerosync?sslmode=disable' go test -race ./internal/httpapi -run Integration -count=1
+set -a
+. ./.env
+set +a
+TEST_DATABASE_URL="$DATABASE_URL" go test -race ./internal/httpapi -run Integration -count=1
 ```
 
 Use a development or test database. Tests create an isolated schema, apply the application migrations, exercise HTTP handlers with the PostgreSQL store, then drop the schema. Without `TEST_DATABASE_URL`, regular Go tests skip these integration checks.
@@ -105,3 +112,9 @@ CI runs the application checks, authentication/registry/audit/telemetry integrat
 ## ArduPilot / SITL
 
 The separate `ardupilot-adapter` process reads a configured MAVLink TCP endpoint or UDP listener and sends normalized observations through the existing ingestion store. It is bound to one ArduPilot drone and an active fleet manager in the same organisation. See [backend/ARDUPILOT.md](backend/ARDUPILOT.md) for simulator launch, binding by email/serial number, field mappings, supported counters, health, and test commands.
+
+## Sprint 1 platform handoff
+
+See [stack and single-node server decisions](docs/ARCHITECTURE.md), [the R-15 spike result](docs/spikes/R15.md), and [the review workflow](docs/REVIEWING.md). `main` requires a pull request and passing backend, frontend, database, and OpenAPI checks. Other contributors need Omar's code-owner approval; Omar has an account-specific review bypass.
+
+For a walkthrough from UI registration to simulated telemetry, use the [SITL demo and troubleshooting guide](docs/SITL_DEMO.md). Registering a drone does not start a connection: the adapter runs separately, and the fleet page requires a refresh to show new readings.

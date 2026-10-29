@@ -4,11 +4,11 @@ All four roles sign in through the same endpoint and screen: system administrato
 
 ## Local setup
 
-Start TimescaleDB and run migrations as described in the root README. Export `DATABASE_URL`, `APP_ORIGIN`, and `COOKIE_SECURE` from `backend/.env.example` in your shell. These commands are run from `backend/`:
+Start TimescaleDB and run migrations as described in the root README. On first setup, copy `backend/.env.example` to `backend/.env` and edit it to match your database. Keep an existing `.env`. Export `DATABASE_URL`, `APP_ORIGIN`, and `COOKIE_SECURE` from that file in each terminal running a Go command. These commands are run from `backend/`:
 
 ```sh
 set -a
-. ./.env.example
+. ./.env
 set +a
 
 # First platform administrator (no organisation):
