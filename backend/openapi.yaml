@@ -10,7 +10,7 @@ info:
 
     Cookie sessions expire after 30 minutes without an authenticated API request and after 24 hours absolutely. Password/role/organisation/active-status changes revoke sessions. Mutations require the exact configured Origin and reject cross-site fetch metadata. CORS is not enabled; use a same-origin frontend/API proxy. Production requires HTTPS and Secure cookies. API errors use JSON; framework-generated unmatched-route/method errors may be plain text and are outside the defined operations.
 
-    CSV/PDF export endpoints and live vendor adapters are not implemented. CSV is a test/fallback ingestion source, not a supported vendor. This draft alone does not establish full NFR-08 compliance.
+    CSV/PDF export endpoints and the DJI adapter are not implemented. The separate ArduPilot MAVLink adapter is verified against SITL and adds no REST routes. CSV is a test/fallback ingestion source, not a supported vendor. This draft alone does not establish full NFR-08 compliance.
 servers:
 - url: http://localhost:5173
   description: Development frontend proxy; requires APP_ORIGIN=http://localhost:5173.
@@ -1338,10 +1338,10 @@ components:
           - body_too_large
 x-nfr-08:
   implemented:
+  - ArduPilot MAVLink adapter verified against SITL (separate operator process)
   - REST/JSON API draft
   - Normalized telemetry common schema
   - SI measurements and UTC response timestamps
   pending:
   - CSV/PDF exports
-  - MAVLink/ArduPilot live vehicle or SITL adapter
   - DJI live adapter or explicitly simulated DJI recordings through a CSV adapter

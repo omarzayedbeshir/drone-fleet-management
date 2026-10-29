@@ -7,3 +7,4 @@ backend/bin/
 *.log
 coverage/
 *.tsbuildinfo
+backend/.local/

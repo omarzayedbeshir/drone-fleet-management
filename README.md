@@ -38,7 +38,7 @@ npm run dev
 
 Open http://localhost:5173. Vite proxies `/api` requests to `http://127.0.0.1:8080`. Sign in using a provisioned account. If you open `http://127.0.0.1:5173` instead, change `APP_ORIGIN` to that exact origin.
 
-The API now requires `DATABASE_URL`, a reachable database, and applied migrations. `GET /api/v1/health` remains a public process-liveness check. The drone registry REST API is implemented; normalized telemetry ingestion/history is also available. Live vendor adapters and mission workflows remain future work. See [telemetry setup and schema](backend/TELEMETRY.md). See [the registry API contract](backend/DRONES.md). See [authentication setup](backend/AUTH.md) to provision the first administrator and accounts for each role.
+The API now requires `DATABASE_URL`, a reachable database, and applied migrations. `GET /api/v1/health` remains a public process-liveness check. The drone registry REST API is implemented; normalized telemetry ingestion/history is also available. An ArduPilot MAVLink adapter is available and verified against SITL; DJI integration and mission workflows remain future work. See [ArduPilot/SITL setup](backend/ARDUPILOT.md). See [telemetry setup and schema](backend/TELEMETRY.md). See [the registry API contract](backend/DRONES.md). See [authentication setup](backend/AUTH.md) to provision the first administrator and accounts for each role.
 
 ## Structure
 
@@ -101,3 +101,7 @@ CI runs the application checks, authentication/registry/audit/telemetry integrat
 ## OpenAPI draft
 
 [backend/openapi.yaml](backend/openapi.yaml) documents the implemented REST/JSON API for NFR-08, including cookie authentication, roles, registry operations, and normalized telemetry. It references the common telemetry schema and clearly identifies remaining NFR-08 work. See [API documentation and validation instructions](backend/API.md). CI validates the specification, examples, route coverage, and DTO/schema field alignment.
+
+## ArduPilot / SITL
+
+The separate `ardupilot-adapter` process reads a configured MAVLink TCP endpoint or UDP listener and sends normalized observations through the existing ingestion store. It is bound to one ArduPilot drone and an active fleet manager in the same organisation. See [backend/ARDUPILOT.md](backend/ARDUPILOT.md) for simulator launch, binding by email/serial number, field mappings, supported counters, health, and test commands.

@@ -12,7 +12,7 @@ The canonical REST/JSON draft is [openapi.yaml](openapi.yaml), using OpenAPI 3.1
 
 The schemas describe canonical values. The server also normalizes metadata strings and checks stateful rules. Password limits are UTF-8 **bytes**, not JSON Schema character counts; schema extensions document those limits. A syntactically valid example is not a guarantee of success against existing accounts, serial numbers, event IDs, or current session state.
 
-The draft does not invent endpoints for unfinished features. CSV/PDF exports and live MAVLink/ArduPilot plus DJI integrations (or the explicitly simulated recorded DJI fallback through a CSV adapter) remain NFR-08 launch work. Accepting a normalized `source` code is not evidence that its live adapter or a CSV file parser exists. Mission, maintenance, and organisation/user administration APIs also remain outside this implemented contract.
+The draft does not invent endpoints for unfinished features. CSV/PDF exports and the DJI integration (or its explicitly simulated recorded DJI fallback through a CSV adapter) remain NFR-08 launch work. The separate ArduPilot MAVLink adapter has been verified against real SITL; it adds no REST routes. Accepting a normalized `source` code is not evidence that its live adapter or a CSV file parser exists. Mission, maintenance, and organisation/user administration APIs also remain outside this implemented contract.
 
 ## Using the draft
 

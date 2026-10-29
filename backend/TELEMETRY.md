@@ -8,7 +8,7 @@ Apply migrations through `000006_telemetry_ingestion.sql` before starting the up
 
 `POST /api/v1/drones/{id}/telemetry` accepts one normalized sample for a drone in the authenticated fleet manager's organisation. It is a manual/testing ingestion endpoint using the existing session cookie and exact `Origin` check. Pilots, technicians, and system administrators cannot submit. Manager/pilot/technician accounts can read their own drone history with `GET /api/v1/drones/{id}/telemetry?limit=20&offset=0`; pagination has the registry bounds (limit 1–100, offset 0–1,000,000). Missing/foreign drone IDs return 404 without writing tenant rejection records.
 
-`internal/telemetry.PostgresStore.Ingest` is also the normalized persistence boundary for future adapters. It expects server-trusted organisation/actor IDs and never performs vendor polling or grants access itself. DJI/MAVLink decoding, CSV file parsing, automatic feed credentials, buffering/retry workers, batching, dashboard notifications, and maintenance-rule processing remain separate work. There is no telemetry frontend or public vendor webhook in this change.
+`internal/telemetry.PostgresStore.Ingest` is also the normalized persistence boundary for future adapters. It expects server-trusted organisation/actor IDs and never performs vendor polling or grants access itself. The [ArduPilot adapter](ARDUPILOT.md) now performs MAVLink decoding and bounded in-memory buffering/retry into this store. DJI decoding, CSV file parsing, public feed credentials, batching, dashboard notifications, and maintenance-rule processing remain separate work. There is no telemetry frontend or public vendor webhook in this change.
 
 ## Common schema
 
