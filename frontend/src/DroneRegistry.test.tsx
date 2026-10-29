@@ -35,6 +35,22 @@ async function fillCreate(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('drone registry', () => {
+  it('refreshes reported status without clearing the applied filters', async () => {
+    const user = userEvent.setup();
+    let status: Drone['status'] = 'unknown';
+    const fetch = server(() => page([{ ...aircraft, status }]));
+    render(<DroneRegistry canManage={false} />);
+    await screen.findByText('Survey 01');
+    await user.selectOptions(screen.getByLabelText('Vendor'), 'dji');
+    await user.click(screen.getByRole('button', { name: 'Apply filters' }));
+    await screen.findByText('Survey 01');
+    status = 'available';
+    await user.click(screen.getByRole('button', { name: /^Refresh$/ }));
+    expect(await screen.findByText('Available', { selector: '.status-badge' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Vendor')).toHaveValue('dji');
+    expect(String(fetch.mock.calls.at(-1)?.[0])).toContain('vendor=dji');
+  });
+
   it('registers normalized metadata and refreshes the list', async () => {
     const user = userEvent.setup(); let created: Drone | null = null;
     const fetch = server((_url, init) => {
