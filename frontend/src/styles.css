@@ -1,0 +1,11 @@
+:root { font-family: system-ui, sans-serif; color: #e5e7eb; background: #111827; font-synthesis: none; line-height: 1.6; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { width: min(100% - 3rem, 64rem); margin: 12vh auto; }
+.eyebrow { color: #5eead4; letter-spacing: .12em; text-transform: uppercase; font-size: .8rem; font-weight: 700; }
+h1 { font-size: clamp(3rem, 8vw, 5rem); letter-spacing: -.05em; line-height: 1.1; margin: 1rem 0; }
+.intro { color: #cbd5e1; font-size: 1.25rem; }
+.status { display: inline-block; padding: .65rem 1rem; background: #1f2937; border: 1px solid #475569; border-radius: .6rem; }
+section { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #374151; }
+h2 { font-size: 1.3rem; }
+section p { color: #cbd5e1; }

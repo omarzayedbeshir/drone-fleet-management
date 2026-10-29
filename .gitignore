@@ -1,0 +1,9 @@
+node_modules/
+frontend/dist/
+backend/bin/
+.env
+.env.*
+!.env.example
+*.log
+coverage/
+*.tsbuildinfo
