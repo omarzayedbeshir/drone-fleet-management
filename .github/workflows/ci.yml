@@ -32,3 +32,21 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run build
+  database:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up -d --wait database
+      - run: ./backend/scripts/migrate.sh
+      - run: ./backend/scripts/migrate.sh
+      - name: Check schema constraints
+        run: >-
+          docker compose exec -T database sh -c
+          'exec psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+          < backend/tests/schema.sql
+      - name: Database logs on failure
+        if: failure()
+        run: docker compose logs database
+      - name: Stop test database
+        if: always()
+        run: docker compose down
