@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -12,14 +11,14 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/auth"
-	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/catalog"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/drones"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/fleet"
 )
 
-type droneHandler struct{ store drones.Store }
+type droneHandler struct{ service *fleet.Service }
 
 func registerDrones(mux *http.ServeMux, a *authHandler, store drones.Store) {
-	d := &droneHandler{store: store}
+	d := &droneHandler{service: fleet.New(store)}
 	readers := []auth.Role{auth.FleetManager, auth.Pilot, auth.MaintenanceTechnician}
 	mux.HandleFunc("GET /api/v1/drones", a.authenticated(d.list, readers...))
 	mux.HandleFunc("GET /api/v1/drones/{id}", a.authenticated(d.get, readers...))
@@ -40,6 +39,10 @@ func droneID(w http.ResponseWriter, r *http.Request) (string, bool) {
 
 func droneError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, fleet.ErrForbidden):
+		writeError(w, http.StatusForbidden, "Fleet access is not permitted")
+	case errors.Is(err, fleet.ErrInvalid):
+		writeError(w, http.StatusBadRequest, strings.TrimPrefix(err.Error(), fleet.ErrInvalid.Error()+": "))
 	case errors.Is(err, drones.ErrNotFound):
 		writeError(w, http.StatusNotFound, "Drone not found")
 	case errors.Is(err, drones.ErrUnsupported):
@@ -57,12 +60,8 @@ func (d *droneHandler) create(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &input) {
 		return
 	}
-	if err := input.NormalizeValidate(); err != nil {
-		writeError(w, 400, err.Error())
-		return
-	}
 	user := currentUser(r)
-	drone, err := d.store.Create(r.Context(), *user.OrganisationID, user.ID, input)
+	drone, err := d.service.Create(r.Context(), user, input)
 	if err != nil {
 		droneError(w, err)
 		return
@@ -75,7 +74,7 @@ func (d *droneHandler) get(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	drone, err := d.store.Get(r.Context(), *currentUser(r).OrganisationID, id)
+	drone, err := d.service.Get(r.Context(), currentUser(r), id)
 	if err != nil {
 		droneError(w, err)
 		return
@@ -91,12 +90,8 @@ func (d *droneHandler) update(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &input) {
 		return
 	}
-	if err := input.NormalizeValidate(); err != nil {
-		writeError(w, 400, err.Error())
-		return
-	}
 	user := currentUser(r)
-	drone, err := d.store.Update(r.Context(), *user.OrganisationID, user.ID, id, input)
+	drone, err := d.service.Update(r.Context(), user, id, input)
 	if err != nil {
 		droneError(w, err)
 		return
@@ -109,7 +104,7 @@ func (d *droneHandler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := currentUser(r)
-	if err := d.store.Delete(r.Context(), *user.OrganisationID, user.ID, id); err != nil {
+	if err := d.service.Delete(r.Context(), user, id); err != nil {
 		droneError(w, err)
 		return
 	}
@@ -123,22 +118,12 @@ func (d *droneHandler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.Query = query
-	items, more, err := d.store.List(r.Context(), *currentUser(r).OrganisationID, f)
+	page, err := d.service.List(r.Context(), currentUser(r), f)
 	if err != nil {
 		droneError(w, err)
 		return
 	}
-	vendors := catalog.Builtins
-	if provider, ok := d.store.(interface {
-		Catalog(context.Context) ([]catalog.Vendor, error)
-	}); ok {
-		vendors, err = provider.Catalog(r.Context())
-		if err != nil {
-			droneError(w, err)
-			return
-		}
-	}
-	writeJSON(w, 200, map[string]any{"vendors": vendors, "drones": items, "pagination": map[string]any{"limit": f.Limit, "offset": f.Offset, "has_more": more}})
+	writeJSON(w, 200, map[string]any{"vendors": page.Vendors, "drones": page.Drones, "pagination": map[string]any{"limit": f.Limit, "offset": f.Offset, "has_more": page.More}})
 }
 
 func parseDroneFilter(r *http.Request, f *drones.Filter) (string, error) {
