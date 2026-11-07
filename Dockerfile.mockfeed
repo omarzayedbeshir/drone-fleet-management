@@ -1,0 +1,14 @@
+# Mock vendor feed for docker-compose / demos. (Not built in CI yet.)
+FROM golang:1.22-alpine AS build
+WORKDIR /src
+COPY go.mod ./
+COPY . .
+RUN CGO_ENABLED=0 go build -o /out/mockfeed ./cmd/mockfeed
+
+FROM alpine:3.20
+RUN adduser -D -u 10001 app
+USER app
+COPY --from=build /out/mockfeed /usr/local/bin/mockfeed
+EXPOSE 8089
+HEALTHCHECK --interval=10s --timeout=3s CMD wget -qO- http://127.0.0.1:8089/healthz || exit 1
+ENTRYPOINT ["mockfeed", "-addr", ":8089"]
