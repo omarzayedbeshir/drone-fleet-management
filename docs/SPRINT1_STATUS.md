@@ -27,6 +27,8 @@ requirements acceptance. The local requirements PDF remains outside Git.
   vendor catalog, generic registry/source validation and data-driven UI labels.
 - New-vendor acceptance prototype and a runnable module starter/guide.
 - Source-reference check and correction of DJI altitude-datum assumptions.
+- Audited battery-cycle baseline recording for managers and technicians, visible
+  provenance, historical counter boundaries and automatic active-connector reload.
 - Documentation distinguishes generated fixtures, native source semantics and
   actual live-vendor evidence. The architecture and operator guides reflect
   the implemented pipeline rather than the original handoff gaps.
@@ -39,7 +41,8 @@ requirements acceptance. The local requirements PDF remains outside Git.
 2. Record a timed real-SDK extension exercise against NFR-07's two-person-day
    target. The automated synthetic prototype demonstrates the extension mechanism,
    not the effort required for an arbitrary vendor SDK.
-3. Document the source of real battery-cycle baselines. SITL does not supply a
+3. Acquire and document the source of real battery-cycle baselines using the
+   [baseline workflow](BATTERY_CYCLES.md). SITL does not supply a
    drone-wide cumulative battery cycle count; actual pack lifecycle acquisition
    needs vendor data/hardware and an agreed reconciliation policy.
 
@@ -54,8 +57,8 @@ See [connectors](CONNECTORS.md), [module installation](ADAPTER_MODULES.md),
 for commands and test locations.
 
 Latest local verification passed the complete backend race suite with real
-TimescaleDB tests, vet/build, all 27 frontend tests and production build, and
-OpenAPI/schema checks (14 operations, 35 examples). Migration 000010 upgraded
+TimescaleDB tests, vet/build, all 32 frontend tests and production build, and
+OpenAPI/schema checks (16 operations, 38 examples). Migration 000011 upgraded
 the existing development database and reran idempotently; SQL constraints passed.
 The new-vendor prototype completed end to end in approximately 1.4 seconds,
 which is explicitly execution time rather than developer-effort evidence.

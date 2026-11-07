@@ -393,3 +393,42 @@ func TestNewVendorModuleIntegration(t *testing.T) {
 	}
 	t.Logf("new module -> catalog -> registry -> managed connector -> common writer completed in %s", time.Since(started))
 }
+
+func TestManualCycleBaselineReloadIntegration(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	b := bindingFixture(t, pool)
+	store := &PostgresStore{Pool: pool, Profiles: Profiles{"demo": {ID: "demo", Label: "Demo", Source: "csv", Vendor: "dji", Simulated: true, CSVPath: "unused"}}}
+	view, err := store.Save(ctx, b.Org, b.Actor, b.Drone, Settings{"demo", true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.Generation = view.Connector.Generation
+	seen := make(chan Binding, 4)
+	var starts, active, max atomic.Int32
+	m := &Manager{Store: store, Poll: 10 * time.Millisecond, Factory: func(binding Binding, _ Profile) (adapters.VendorAdapter, error) {
+		seen <- binding
+		return &fakeAdapter{starts: &starts, active: &active, max: &max}, nil
+	}}
+	cancel, done := launch(m)
+	defer func() { cancel(); <-done }()
+	await(t, func() bool { return starts.Load() == 1 })
+	first := <-seen
+	var oldOwner string
+	if err = pool.QueryRow(ctx, `SELECT runtime_owner::text FROM drone_connectors WHERE drone_id=$1`, b.Drone).Scan(&oldOwner); err != nil {
+		t.Fatal(err)
+	}
+	reading, err := (&telemetry.PostgresStore{Pool: pool}).RecordCycleBaseline(ctx, b.Org, b.Actor, b.Drone, telemetry.CycleReading{Total: 5, ExpectedTotal: 0, ExpectedRevision: 0, Reason: "Verified service log"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldSample := telemetry.Sample{EventID: "old-worker", Source: "csv", ObservedAt: reading.RecordedAt.Add(time.Second), Status: "unknown", FlightTimeSeconds: 0, BatteryCycles: 5, FaultFlags: []string{}}
+	if _, err = store.persist(ctx, first, oldOwner, []telemetry.Sample{oldSample}); !errors.Is(err, ErrInactive) {
+		t.Fatal("old baseline worker was not fenced", err)
+	}
+	await(t, func() bool { return starts.Load() == 2 && active.Load() == 1 })
+	second := <-seen
+	if second.Cycles != 5 || second.BaselineRevision != 1 || max.Load() != 1 {
+		t.Fatalf("baseline not reloaded safely: %+v max %d", second, max.Load())
+	}
+}

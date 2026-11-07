@@ -68,8 +68,10 @@ func (s *PostgresStore) IngestBatchTx(ctx context.Context, tx pgx.Tx, org, actor
 	var vendor, status string
 	var latest *time.Time
 	var flight, cycles int64
-	err = tx.QueryRow(ctx, `SELECT vendor,status,last_telemetry_at,flight_time_seconds,battery_cycles
- FROM drones WHERE organisation_id=$1 AND id=$2 FOR UPDATE`, org, id).Scan(&vendor, &status, &latest, &flight, &cycles)
+	var cycleSource, cycleNote string
+	var cycleAt *time.Time
+	err = tx.QueryRow(ctx, `SELECT vendor,status,last_telemetry_at,flight_time_seconds,battery_cycles,battery_cycles_source,battery_cycles_recorded_at,battery_cycles_note
+ FROM drones WHERE organisation_id=$1 AND id=$2 FOR UPDATE`, org, id).Scan(&vendor, &status, &latest, &flight, &cycles, &cycleSource, &cycleAt, &cycleNote)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -146,6 +148,16 @@ func (s *PostgresStore) IngestBatchTx(ctx context.Context, tx pgx.Tx, org, actor
 			cause = reject("invalid_sample", "New observations must be within telemetry retention")
 		}
 		if cause == nil {
+			var contradiction bool
+			err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM battery_cycle_readings WHERE organisation_id=$1 AND drone_id=$2 AND ((recorded_at<$3 AND total>$4) OR (recorded_at>$3 AND total<$4) OR (recorded_at=$3 AND total<>$4)))`, org, id, sample.ObservedAt, sample.BatteryCycles).Scan(&contradiction)
+			if err != nil {
+				return nil, err
+			}
+			if contradiction || (latest == nil && sample.BatteryCycles < cycles) {
+				cause = reject("counter_regression", "Battery cycles contradict a recorded baseline")
+			}
+		}
+		if cause == nil {
 			cause = checkHistory(ctx, tx, org, id, sample, pending, latest, flight, cycles)
 		}
 		if cause != nil {
@@ -162,6 +174,14 @@ func (s *PostgresStore) IngestBatchTx(ctx context.Context, tx pgx.Tx, org, actor
 		updated := latest == nil || sample.ObservedAt.After(*latest)
 		if updated {
 			at := sample.ObservedAt
+			if vendor != "ardupilot" && !(cycleSource == "manual" && sample.BatteryCycles == cycles) {
+				cycleSource = "telemetry"
+				if sample.Source == "csv" {
+					cycleSource = "simulated"
+				}
+				cycleAt = &at
+				cycleNote = ""
+			}
 			latest, flight, cycles = &at, sample.FlightTimeSeconds, sample.BatteryCycles
 			if status != "grounded" {
 				status = sample.Status
@@ -193,8 +213,8 @@ func (s *PostgresStore) IngestBatchTx(ctx context.Context, tx pgx.Tx, org, actor
 	// Update once with the newest accepted observation, preserving grounded state.
 	for i := len(pending) - 1; i >= 0; i-- {
 		if pending[i].ObservedAt.Equal(*latest) {
-			_, err := tx.Exec(ctx, `UPDATE drones SET status=$3,last_telemetry_at=$4,flight_time_seconds=$5,battery_cycles=$6,fault_flags=$7
- WHERE organisation_id=$1 AND id=$2`, org, id, status, latest, flight, cycles, pending[i].FaultFlags)
+			_, err := tx.Exec(ctx, `UPDATE drones SET status=$3,last_telemetry_at=$4,flight_time_seconds=$5,battery_cycles=$6,fault_flags=$7,battery_cycles_source=$8,battery_cycles_recorded_at=$9,battery_cycles_note=$10
+ WHERE organisation_id=$1 AND id=$2`, org, id, status, latest, flight, cycles, pending[i].FaultFlags, cycleSource, cycleAt, cycleNote)
 			if err != nil {
 				return nil, err
 			}

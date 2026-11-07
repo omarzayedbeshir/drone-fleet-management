@@ -1,3 +1,4 @@
+import { BatteryCycles } from './BatteryCycles';
 import { ConnectorPanel } from './ConnectorPanel';
 import { lazy, Suspense, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
@@ -19,7 +20,7 @@ function Status({ value }: { value: DroneStatus }) {
 
 type Selection = { id: string; mode: 'view' | 'edit' | 'delete' } | { mode: 'create' } | null;
 
-export function DroneRegistry({ canManage }: { canManage: boolean }) {
+export function DroneRegistry({ canManage, canRecordCycles = canManage }: { canManage: boolean; canRecordCycles?: boolean }) {
   const [draft, setDraft] = useState<DroneFilters>({ ...emptyFilters });
   const [filters, setFilters] = useState<DroneFilters>({ ...emptyFilters });
   const [offset, setOffset] = useState(0);
@@ -82,7 +83,7 @@ export function DroneRegistry({ canManage }: { canManage: boolean }) {
         <div>
           <p className="eyebrow">Operations / Aircraft</p>
           <h3 id="registry-title" ref={headingRef} tabIndex={-1}>Drone registry</h3>
-          <p>{canManage ? 'Aircraft, registration details, and latest reported status.' : 'Browse your organisation’s registered aircraft. You have read-only access.'}</p>
+          <p>{canManage ? 'Aircraft, registration details, and latest reported status.' : canRecordCycles ? 'Browse your fleet and record documented battery-cycle baselines.' : 'Browse your organisation’s registered aircraft. You have read-only access.'}</p>
         </div>
         <div className="registry-actions">
           <button className="secondary" aria-expanded={showMap} aria-controls="fleet-map-panel" onClick={() => setShowMap(value => !value)}>{showMap ? 'Hide map' : 'Show map'}</button>
@@ -166,7 +167,7 @@ export function DroneRegistry({ canManage }: { canManage: boolean }) {
         )}
       </div>
       {selection?.mode === 'create' && <DroneEditor vendors={vendors} onClose={() => setSelection(null)} onSaved={drone => saved(drone, true)} />}
-      {selection && selection.mode !== 'create' && <DroneDialog key={`${selection.id}:${selection.mode}`} id={selection.id} mode={selection.mode} vendors={vendors} canManage={canManage}
+      {selection && selection.mode !== 'create' && <DroneDialog key={`${selection.id}:${selection.mode}`} id={selection.id} mode={selection.mode} vendors={vendors} canManage={canManage} canRecordCycles={canRecordCycles}
         onClose={() => setSelection(null)} onMode={mode => setSelection({ id: selection.id, mode })} onSaved={drone => saved(drone, false)} onRemoved={removed} />}
     </section>
   );
@@ -233,8 +234,8 @@ function DroneEditor({ initial, vendors, onClose, onSaved }: { initial?: Drone; 
   );
 }
 
-function DroneDialog({ id, mode, canManage, vendors, onClose, onMode, onSaved, onRemoved }: {
-  id: string; mode: 'view' | 'edit' | 'delete'; canManage: boolean; vendors: Record<string, string>; onClose: () => void;
+function DroneDialog({ id, mode, canManage, canRecordCycles, vendors, onClose, onMode, onSaved, onRemoved }: {
+  id: string; mode: 'view' | 'edit' | 'delete'; canManage: boolean; canRecordCycles: boolean; vendors: Record<string, string>; onClose: () => void;
   onMode: (mode: 'view' | 'edit' | 'delete') => void; onSaved: (drone: Drone) => void; onRemoved: (drone: Drone) => void;
 }) {
   const [drone, setDrone] = useState<Drone | null>(null);
@@ -286,6 +287,7 @@ function DroneDialog({ id, mode, canManage, vendors, onClose, onMode, onSaved, o
             <div><dt>Last telemetry</dt><dd>{date(drone.last_telemetry_at)}</dd></div><div><dt>Registered</dt><dd>{date(drone.created_at)}</dd></div>
             <div><dt>Last edited</dt><dd>{date(drone.updated_at)}</dd></div>
           </dl>
+          <BatteryCycles key={`cycles-${drone.id}`} droneId={drone.id} vendor={drone.vendor} canRecord={canRecordCycles} />
           <ConnectorPanel key={drone.id} droneId={drone.id} canManage={canManage} />
           <div className="dialog-actions">{canManage && <><button className="secondary" onClick={() => onMode('edit')}>Edit drone</button><button className="text-button danger-text" onClick={() => onMode('delete')}>Remove drone</button></>}<button onClick={onClose}>Done</button></div>
         </>

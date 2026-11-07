@@ -143,12 +143,12 @@ func (s *PostgresStore) Save(ctx context.Context, org, actor, id string, input S
 // Binding is internal and never serialized to API clients.
 type Binding struct {
 	Org, Drone, Actor, Profile, Vendor, Serial, State string
-	Generation, Flight, Cycles                        int64
+	Generation, Flight, Cycles, BaselineRevision      int64
 	Active                                            bool
 }
 
 func (s *PostgresStore) bindings(ctx context.Context) ([]Binding, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT c.organisation_id::text,c.drone_id::text,c.actor_id::text,c.profile_id,d.vendor,d.serial_number,c.state,c.generation,d.flight_time_seconds,d.battery_cycles,COALESCE(u.is_active AND u.role='fleet_manager' AND u.organisation_id=c.organisation_id,false) FROM drone_connectors c JOIN drones d ON d.id=c.drone_id AND d.organisation_id=c.organisation_id LEFT JOIN users u ON u.id=c.actor_id WHERE c.enabled`)
+	rows, err := s.Pool.Query(ctx, `SELECT c.organisation_id::text,c.drone_id::text,c.actor_id::text,c.profile_id,d.vendor,d.serial_number,c.state,c.generation,d.flight_time_seconds,d.battery_cycles,d.cycle_baseline_revision,COALESCE(u.is_active AND u.role='fleet_manager' AND u.organisation_id=c.organisation_id,false) FROM drone_connectors c JOIN drones d ON d.id=c.drone_id AND d.organisation_id=c.organisation_id LEFT JOIN users u ON u.id=c.actor_id WHERE c.enabled`)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (s *PostgresStore) bindings(ctx context.Context) ([]Binding, error) {
 	var out []Binding
 	for rows.Next() {
 		var b Binding
-		if err = rows.Scan(&b.Org, &b.Drone, &b.Actor, &b.Profile, &b.Vendor, &b.Serial, &b.State, &b.Generation, &b.Flight, &b.Cycles, &b.Active); err != nil {
+		if err = rows.Scan(&b.Org, &b.Drone, &b.Actor, &b.Profile, &b.Vendor, &b.Serial, &b.State, &b.Generation, &b.Flight, &b.Cycles, &b.BaselineRevision, &b.Active); err != nil {
 			return nil, err
 		}
 		out = append(out, b)
@@ -186,14 +186,15 @@ func (s *PostgresStore) persist(ctx context.Context, b Binding, owner string, sa
 	}
 	defer tx.Rollback(ctx)
 	var vendor, serial string
-	err = tx.QueryRow(ctx, `SELECT vendor,serial_number FROM drones WHERE organisation_id=$1 AND id=$2 FOR UPDATE`, b.Org, b.Drone).Scan(&vendor, &serial)
+	var baselineRevision int64
+	err = tx.QueryRow(ctx, `SELECT vendor,serial_number,cycle_baseline_revision FROM drones WHERE organisation_id=$1 AND id=$2 FOR UPDATE`, b.Org, b.Drone).Scan(&vendor, &serial, &baselineRevision)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, &adapters.PermanentError{Err: ErrInactive}
 	}
 	if err != nil {
 		return nil, err
 	}
-	if vendor != b.Vendor || serial != b.Serial {
+	if vendor != b.Vendor || serial != b.Serial || baselineRevision != b.BaselineRevision {
 		return nil, &adapters.PermanentError{Err: ErrInactive}
 	}
 	var active bool

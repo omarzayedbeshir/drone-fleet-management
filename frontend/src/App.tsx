@@ -156,7 +156,7 @@ function Workspace({ user, signedOut }: { user: User; signedOut: (text: string) 
       {user.role === 'system_administrator' ? <>
         <h3>Your workspace</h3>
         <ul className="areas">{role.areas.map(area => <li key={area}>{area}<span>Coming soon</span></li>)}</ul>
-      </> : <DroneRegistry canManage={user.role === 'fleet_manager'} />}
+      </> : <DroneRegistry canManage={user.role === 'fleet_manager'} canRecordCycles={user.role === 'fleet_manager' || user.role === 'maintenance_technician'} />}
       <footer className="workspace-footer"><span>AeroSync · Fleet management</span><span>Sessions expire after 30 minutes of inactivity.</span></footer>
     </section>
   );
