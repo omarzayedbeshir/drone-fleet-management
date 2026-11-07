@@ -398,3 +398,63 @@ func TestCancelDuringEmitRetryReturnsPromptly(t *testing.T) {
 		t.Fatal("Run did not stop while retrying emit")
 	}
 }
+
+// A buffered sample may still be processed after the producer has terminated.
+// Synchronize on the terminal failure so this regression does not depend on
+// which goroutine happens to finish first.
+func TestPermanentSourceFailureSurvivesBufferedStoreErrors(t *testing.T) {
+	for _, reject := range []bool{false, true} {
+		name := "temporary store error then success"
+		if reject {
+			name = "rejected buffered sample"
+		}
+		t.Run(name, func(t *testing.T) {
+			src := &scriptedSource{
+				sessions:    [][]vendor.RawRecord{{raw("D1", 1, false)}, {raw("D1", 2, false)}},
+				sessionErrs: []error{fmt.Errorf("credentials revoked: %w", vendor.ErrPermanent)},
+			}
+			a := newAdapter(t, src, time.Millisecond, time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			attempts := 0
+			err := a.Run(ctx, func(context.Context, telemetry.Sample) error {
+				attempts++
+				if attempts == 1 {
+					for a.Health().LastError != permanentSourceFailure {
+						select {
+						case <-ctx.Done():
+							return ctx.Err()
+						case <-time.After(time.Millisecond):
+						}
+					}
+					if reject {
+						return &adapters.PermanentError{Err: errors.New("invalid sample")}
+					}
+					return errors.New("temporary database outage")
+				}
+				return nil
+			})
+			if !errors.Is(err, vendor.ErrPermanent) {
+				t.Fatalf("Run = %v, want source failure", err)
+			}
+			h := a.Health()
+			if h.LastError != permanentSourceFailure || h.Ready || h.Connected {
+				t.Fatalf("terminal source failure lost: %+v", h)
+			}
+			if reject {
+				if attempts != 1 || h.Rejected != 1 || h.Accepted != 0 {
+					t.Fatalf("attempts %d health %+v", attempts, h)
+				}
+			} else if attempts != 2 || h.Accepted != 1 {
+				t.Fatalf("attempts %d health %+v", attempts, h)
+			}
+			// Explicitly starting the same adapter again must clear the old failure.
+			if err := a.Run(ctx, accept); err != nil {
+				t.Fatal(err)
+			}
+			if h := a.Health(); h.LastError != "" {
+				t.Fatalf("stale terminal failure after new run: %+v", h)
+			}
+		})
+	}
+}
