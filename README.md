@@ -41,7 +41,7 @@ npm run dev
 
 Open http://localhost:5173. Vite proxies `/api` requests to `http://127.0.0.1:8080`. Sign in using a provisioned account. If you open `http://127.0.0.1:5173` instead, change `APP_ORIGIN` to that exact origin.
 
-The API now requires `DATABASE_URL`, a reachable database, and applied migrations. `GET /api/v1/health` remains a public process-liveness check. The drone registry REST API is implemented; normalized telemetry ingestion/history is also available. An ArduPilot MAVLink adapter is available and verified against SITL; DJI integration and mission workflows remain future work. See [ArduPilot/SITL setup](backend/ARDUPILOT.md). See [telemetry setup and schema](backend/TELEMETRY.md). See [the registry API contract](backend/DRONES.md). See [authentication setup](backend/AUTH.md) to provision the first administrator and accounts for each role.
+The API now requires `DATABASE_URL`, a reachable database, and applied migrations. `GET /api/v1/health` remains a public process-liveness check. The drone registry REST API is implemented; normalized telemetry ingestion/history is also available. An ArduPilot MAVLink adapter is available and verified against SITL; The integrated CSV/mock ingestion pipeline provides a labelled simulated DJI fallback; live DJI endpoints still require vendor verification. Mission workflows remain future work. See [the ingestion guide](docs/ingestion-test-infra.md). See [ArduPilot/SITL setup](backend/ARDUPILOT.md). See [telemetry setup and schema](backend/TELEMETRY.md). See [the registry API contract](backend/DRONES.md). See [authentication setup](backend/AUTH.md) to provision the first administrator and accounts for each role.
 
 ## Structure
 

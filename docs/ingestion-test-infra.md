@@ -1,100 +1,141 @@
-# Hamza's Sprint 1 workstream: other sources and test infrastructure
+# Integrated source and pipeline guide
 
-Covers FR-08, NFR-09 (CI and mock feed), UC-11, R-02, R-09. Stdlib only, Go 1.22.
+The Sprint 1 contributions from PRs #6, #7 and #8 now live in the single
+`backend/go.mod` module and run in the existing backend/database CI jobs.
+`make test` runs all backend race tests; `make lint` checks formatting, vet and
+build; frontend and OpenAPI checks remain separate required CI jobs.
 
-## What is where
+## Contracts and extension path
 
-| Path | What it is |
-|---|---|
-| `.github/workflows/ci.yml` | CI on every PR: `lint` (gofmt, vet, build) and `test` (race detector, TimescaleDB service, coverage summary) |
-| `internal/vendor/vendor.go` | **STUB of Seif's `VendorAdapter` contract.** Replace with Seif's real package; fix signatures if they differ |
-| `internal/credentials/` | `Provider` interface (+ `EnvProvider`, `StaticProvider`). The Sprint 2 encrypted-at-rest provider (NFR-04) implements the same interface, so adapters do not change |
-| `internal/mockfeed/` | Mock vendor: slow / down / malformed injection. In-process adapter (`Feed`) and HTTP server (`NewServer`) |
-| `cmd/mockfeed/` | Runs the mock as a server; faults can be flipped live via `PUT /admin/faults` |
-| `internal/adapters/csvreplay/` | CSV/replay adapter (fallback, demo and test source) |
-| `internal/adapters/dji/` | DJI adapter (polling REST) |
-| `internal/adapters/djisource/` | Picks live DJI vs simulated replay (R-02) |
-| `internal/adapters/adaptertest/` | Reusable conformance suite any adapter can run (NFR-07/NFR-09) |
-| `internal/rawutil/` | `Flatten`, CSV value parsing, timestamp parsing shared by all three sources |
-| `testdata/dji_sample.csv` | 120-row **simulated** DJI-format sample (3 drones). Regenerate: `make sample` |
+The public normalized contract is `backend/internal/telemetry.Sample`, version
+1 in `backend/schemas/telemetry.schema.json` and `backend/openapi.yaml`. SI
+measurements, UTC timestamps, integer cumulative counters and fixed source
+identifiers (`ardupilot`, `dji`, `csv`) are shared with the API and dashboard.
+The version is documented rather than adding an incompatible JSON field.
+Unknown counters cause rejection; they never become invented zero totals.
+Unknown operational mode becomes `unknown`, rather than guessed availability.
+Explicit percentages remain percentages, including a 1% reading.
 
-## Commands
+A normalized vendor adapter implements `internal/adapters.VendorAdapter`
+(`Run`, `Health`). ArduPilot's MAVLink adapter already implements that contract.
+Raw JSON/CSV sources implement the internal lifecycle in `internal/vendor`
+(`Connect`, `Subscribe`, `Health`, `Close`). `internal/ingestion.Adapter` wraps
+that lifecycle into the same normalized adapter boundary:
 
-    make test       # all tests, race detector
-    make lint       # what CI's lint job runs
-    make cover
-    make mockfeed   # mock vendor on :8089, token dev-token
+```
+raw source -> scalar telemetry privacy allowlist -> bounded ingress queue
+           -> vendor field normalization -> common decoder validation
+           -> retryable normalized callback -> transactional telemetry writer
+```
 
-Demo outage handling while the system runs:
+Add a raw source module implementing that lifecycle and configure the wrapper;
+no changes to the common schema, writer, or dashboard are needed when the
+source supplies the supported fields. Follow the CSV/DJI examples and
+`internal/adapters/adaptertest` conformance suite. Add real source fixtures to
+`internal/ingestion` tests. New vendor field mappings belong in normalization,
+not the UI. A genuinely new measurement needs a coordinated schema change.
 
-    curl -X PUT localhost:8089/admin/faults -d '{"down":true}'
-    curl -X PUT localhost:8089/admin/faults -d '{"latency_ms":3000}'
-    curl -X PUT localhost:8089/admin/faults -d '{"malformed_rate":0.3,"malformed_kinds":["wrong_type","out_of_range"]}'
-    curl -X PUT localhost:8089/admin/faults -d '{}'     # all clear
+The wrapper binds exactly one vendor serial to an already registered drone.
+Other serials in a multi-drone recording are ignored. Queue records are filtered
+before buffering; arbitrary objects, media, payloads, and unknown fields cannot
+cross that boundary. Malformed normalization is logged without raw values.
+Store validation produces durable rejection records. Database retries retain
+identical observations and event IDs. Source outages retry exponentially;
+permanent configuration failures stop. Full queues apply backpressure and log
+capacity pressure, with rate limiting. Buffers are in memory, not crash durable.
 
-Malformed kinds: `missing_field`, `wrong_type`, `out_of_range`, `bad_timestamp`,
-`duplicate`, `empty`, `broken_json` (HTTP only). Each is something Ziad's
-validator must reject/log or de-duplicate. `IncludeImagery` / `-imagery` adds
-`camera_frame_b64` and `payload_*` fields that Ali's privacy filter must drop.
+## Recorded DJI-format fallback
 
-Docker Compose snippet for Omar's file:
+Apply migrations, register a DJI drone whose serial is `SIM-DJI-A001`, and use
+an active fleet manager in the same organisation. From `backend/`, with your
+existing environment exported:
 
-    mockfeed:
-      build: { context: ., dockerfile: Dockerfile.mockfeed }
-      command: ["-token", "dev-token", "-drones", "5", "-imagery"]
-      ports: ["8089:8089"]
+```sh
+go run ./cmd/vendor-adapter -source csv -csv testdata/dji_sample.csv \
+  -drone-serial SIM-DJI-A001 -actor-email manager@example.test -speed 10
+```
 
-## Raw record shape (agree this with Ali: it is the input to his normalizer)
+The committed fixture contains 40 observations each for three simulated drones.
+It is generated data, not a recording from real DJI hardware. Its `height`
+column represents MSL metres in this fixture. Stored `source=csv` and the map's
+“Simulated / recorded telemetry” label identify the fallback. Original observation
+timestamps are preserved; old recordings appear stale, never current. Replaying
+an identical file deduplicates rather than inflating counters.
 
-Every source emits `vendor.RawRecord{Vendor, SourceDroneID, ReceivedAt, Simulated, Payload}`.
-`Payload` is **flat** (nested objects joined with `_`; empty cells/lists omitted).
+Retention defaults to 90 days, so much older recordings are rejected. To make
+a new generated sample, choose a UTC start time sufficiently in the past that
+all generated observations are within the five-minute future tolerance:
 
-| Raw key | Example | Unit / note for the DJI mapping |
-|---|---|---|
-| `device_sn` | `SIM-DJI-A001` | vendor drone id |
-| `timestamp` | `1792486800500` | **epoch milliseconds** (number) -> ISO 8601 UTC |
-| `latitude`, `longitude` | `30.0445` | degrees |
-| `height` | `50` | metres |
-| `horizontal_speed`, `vertical_speed` | `5.5` | m/s |
-| `attitude_head` | `33` | degrees |
-| `battery_capacity_percent` | `94.8` | percent |
-| `battery_voltage` | `22800` | **millivolts** -> volts |
-| `battery_temperature` | `31.5` | degrees Celsius -> SI |
-| `battery_loop_times` | `207` | battery cycle count (SOC-04) |
-| `total_flight_time` | `248401` | seconds (flight hours = /3600) |
-| `mode_code` | `5` | vendor flight mode |
-| `fault_codes` | `0x0A01;0x0B02` | `;`-joined, absent when none |
+```sh
+go run ./cmd/gensample -start 2026-11-07T08:00:00Z -out /tmp/dji-demo.csv
+```
 
-`Simulated` is `true` for CSV replay and the mock, `false` for live DJI. It lives
-on the record (not in `Payload`) so the privacy filter and normalizer cannot drop it.
-It must be carried through to storage/dashboard so the demo can say "simulated" (NFR-08).
+Use a fresh registered drone for a new simulated run whose generated cumulative
+counters would contradict existing history. Do not reset real fleet counters
+or rewrite old observation timestamps to disguise stale readings.
 
-## Things you MUST verify (I could not)
+## Mock HTTP source and outage tests
 
-1. **DJI endpoints and fields.** `dji.Config` defaults (`/devices`,
-   `/devices/%s/telemetry`, `X-User-Token`, `{"code","message","data"}` envelope,
-   poll-based) are modelled on DJI's Cloud API style, not copied from your granted
-   access. Check them against what DJI actually gave you; adjust `Config` defaults
-   or `Adapter.get`. If DJI delivers over MQTT/WebSocket instead of REST, only
-   `Subscribe` and `get` change. Then update the field table above and
-   `testdata/dji_sample.csv` so the fallback matches reality.
-2. **Real field names/units** in the table above are plausible placeholders; confirm with one real response, then tell Ali.
-3. **Contract stub.** Compile against Seif's real `VendorAdapter` once merged.
-4. **Not run here:** the GitHub Actions workflow (YAML validated, commands run locally) and the Dockerfile.
+From the repository root, `make mockfeed` starts the test server on port 8089.
+It is a simulated configurable HTTP contract, not proof of live DJI compatibility.
+Set `AEROSYNC_DJI_API_KEY=dev-token` in the operator shell. Register the matching
+mock serial (default `MOCK-0001`), then from `backend/` run:
 
-## Behaviour contract worth knowing (for Seif's connector manager)
+```sh
+go run ./cmd/vendor-adapter -source dji -simulated -endpoint http://127.0.0.1:8089 \
+  -drone-serial MOCK-0001 -actor-email manager@example.test
+```
 
-- `Subscribe` returns `nil` when the source is finished (CSV file done), an error on failure, and returns promptly on cancel.
-- Errors wrapping `vendor.ErrPermanent` (bad credentials, bad config, unreadable CSV) should NOT be retried. Everything else is retryable with backoff. `ErrPermanent` is my addition to the contract: raise it with Seif.
-- The DJI adapter tolerates `MaxConsecutiveFailures` (default 3) failed poll cycles, then returns an error so the manager backs off. Exponential backoff itself lives in the manager (NFR-03), not in adapters.
-- Adapters never drop imagery or "fix" bad values; that is the privacy filter's and validator's job.
+Fault controls:
 
-## Sprint 1 checklist
+```sh
+curl -X PUT localhost:8089/admin/faults -d '{"down":true}'
+curl -X PUT localhost:8089/admin/faults -d '{"latency_ms":3000}'
+curl -X PUT localhost:8089/admin/faults -d '{"malformed_rate":0.3}'
+curl -X PUT localhost:8089/admin/faults -d '{}'
+```
 
-- [x] DJI developer access (done already)
-- [ ] CI merged and set as required checks `lint` + `test` (Omar: branch protection)
-- [ ] Mock feed merged **first** (Ali and Ziad are waiting on it)
-- [x] CSV/replay adapter + simulated DJI sample
-- [x] DJI adapter + credentials interface
-- [ ] Confirm DJI endpoints/fields with real access, update sample if needed
-- [ ] End-to-end run with Ali/Ziad/Seif; R-01 schema check against both vendors' samples
+Do not expose the fault-control server publicly. Credentials are redacted in
+provider logs and supplied by environment variables; this is not an encrypted
+credential-management service. Live DJI endpoint/protocol/field assumptions
+must be confirmed against granted vendor access before selecting a live source.
+No live DJI integration is claimed by the mock or CSV tests.
+
+## Writer, freshness and battery configuration
+
+`PostgresStore.IngestBatch` accepts 1–100 records for one bound drone. It locks
+the drone, validates stored and pending temporal neighbours, COPY-inserts
+accepted observations and rejection hashes, updates the newest projection once,
+and transactionally publishes `new_telemetry` PostgreSQL notifications. Exact
+retries survive sample retention through receipt hashes/timestamps. Consumers
+must scope events to their organisation and resync history after reconnecting;
+NOTIFY is a transient event feed, not durable delivery. The dashboard continues
+using authenticated history polling. ArduPilot's production command uses batch
+delivery with bounded collection latency and immutable retries.
+
+Migration 000007 configures seven-day compression and 90-day sample retention.
+An operator may change policies with `configure_telemetry_storage(retain,
+compress_after)`; require `0 < compress_after < retain`. Receipts remain for
+identity checks after sample retention. Migration 000008 backfills original
+receipt timestamps for existing records. Applied migration files are immutable.
+
+Registry GET/list and status filters calculate freshness using
+`TELEMETRY_FRESHNESS` (default 30 seconds); stale/unseen drones show `unknown`,
+while grounded aircraft remain grounded. Observation timestamps remain visible.
+The calculation never rewrites audit history or stored telemetry.
+
+Battery cycles are stored cumulatively. The `ConfigureBattery` repository method
+validates rated-cycle/alert-fraction settings and writes their audit event in
+the same transaction. These settings are a foundation for the later maintenance
+rules workflow; this integration does not claim to deliver maintenance alerts.
+
+## Acceptance evidence
+
+`internal/ingestion` tests join the real CSV/HTTP mock sources to privacy,
+normalization and retry handling. `internal/contract` tests include camera frame
+removal, field units, 1% battery, small scaled coordinates and queue ownership.
+PostgreSQL integration tests in `internal/httpapi` verify the committed CSV
+fixture reaches history, repeats idempotently, and stays tenant scoped; mixed
+batch outcomes, migrations, freshness and battery audit rollback are checked
+alongside the existing authentication, telemetry and MAVLink transport tests.
+Real SITL remains opt-in with `SITL_MAVLINK_ENDPOINT` and `TEST_DATABASE_URL`.

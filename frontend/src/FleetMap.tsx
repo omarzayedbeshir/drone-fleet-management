@@ -89,6 +89,8 @@ export function FleetMap({ drones }: { drones: Drone[] }) {
           {feed?.error && <p className="error" role="alert">{feed.error}{sample ? ' Showing the last loaded readings.' : ''}</p>}
           {!sample ? <p className="map-notice">{loading && !hasSnapshot ? 'Waiting for telemetry…' : 'No telemetry received. Start the adapter for this aircraft.'}</p> : <>
             <p className="telemetry-time">Latest observation<br /><time dateTime={sample.observed_at}>{timestamp(sample.observed_at)}</time></p>
+            {sample.source === 'csv' && <p className="map-notice">Simulated / recorded telemetry</p>}
+            <p className="muted">Historical readings. Refresh the registry to check current fleet status.</p>
             <dl className="telemetry-readings">
               <div><dt>Reported status</dt><dd>{statusLabels[sample.status]}</dd></div>
               <div><dt>Battery</dt><dd>{measurement(sample.battery_percent, '%')}</dd></div>

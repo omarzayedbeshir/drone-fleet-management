@@ -44,8 +44,15 @@ func run() error {
 			return errors.New("COOKIE_SECURE must be true or false")
 		}
 	}
+	freshness := 30 * time.Second
+	if value := os.Getenv("TELEMETRY_FRESHNESS"); value != "" {
+		freshness, err = time.ParseDuration(value)
+		if err != nil || freshness <= 0 {
+			return errors.New("TELEMETRY_FRESHNESS must be a positive duration")
+		}
+	}
 	handler, err := httpapi.NewAuthenticatedHandler(httpapi.AuthConfig{
-		Store: &auth.PostgresStore{Pool: pool}, Registry: &drones.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}}, Telemetry: &telemetry.PostgresStore{Pool: pool}, Origin: os.Getenv("APP_ORIGIN"), SecureCookies: secure,
+		Store: &auth.PostgresStore{Pool: pool}, Registry: &drones.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}, Freshness: freshness}, Telemetry: &telemetry.PostgresStore{Pool: pool}, Origin: os.Getenv("APP_ORIGIN"), SecureCookies: secure,
 	})
 	if err != nil {
 		return err

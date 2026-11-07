@@ -8,7 +8,7 @@ Apply migrations through `000006_telemetry_ingestion.sql` before starting the up
 
 `POST /api/v1/drones/{id}/telemetry` accepts one normalized sample for a drone in the authenticated fleet manager's organisation. It is a manual/testing ingestion endpoint using the existing session cookie and exact `Origin` check. Pilots, technicians, and system administrators cannot submit. Manager/pilot/technician accounts can read their own drone history with `GET /api/v1/drones/{id}/telemetry?limit=20&offset=0`; pagination has the registry bounds (limit 1–100, offset 0–1,000,000). Missing/foreign drone IDs return 404 without writing tenant rejection records.
 
-`internal/telemetry.PostgresStore.Ingest` is also the normalized persistence boundary for future adapters. It expects server-trusted organisation/actor IDs and never performs vendor polling or grants access itself. The [ArduPilot adapter](ARDUPILOT.md) now performs MAVLink decoding and bounded in-memory buffering/retry into this store. DJI decoding, CSV file parsing, public feed credentials, batching, dashboard notifications, and maintenance-rule processing remain separate work. The [fleet map](../frontend/MAP.md) reads stored telemetry through the authenticated history endpoint; no public vendor webhook is exposed.
+`internal/telemetry.PostgresStore.Ingest` and `IngestBatch` are the normalized persistence boundary for adapters. It expects server-trusted organisation/actor IDs and never performs vendor polling or grants access itself. The [ArduPilot adapter](ARDUPILOT.md) now performs MAVLink decoding and bounded in-memory buffering/retry into this store. The [integrated raw-source pipeline](../docs/ingestion-test-infra.md) adds DJI-format CSV/mock decoding, privacy before buffering, bounded retries, and COPY-based batch writing. Live DJI access remains unverified; public feed credentials and maintenance-rule processing remain separate work. PostgreSQL notifications publish committed telemetry metadata; dashboard polling remains the UI delivery mechanism. The [fleet map](../frontend/MAP.md) reads stored telemetry through the authenticated history endpoint; no public vendor webhook is exposed.
 
 ## Common schema
 
@@ -56,7 +56,7 @@ Each ingestion transaction locks the owned drone. It inserts the duplicate recei
 
 Observation/receipt/projection failures roll back the entire acceptance. Concurrent retries, including separate API processes, serialize on the drone and are accepted once. Accepted observations and duplicate receipts reject ordinary UPDATE/DELETE/TRUNCATE. Drone deletion with accepted history fails with 409; organisation deletion cascades through telemetry history as allowed by the existing deletion policy.
 
-The registry API includes read-only cumulative counters/fault flags. Raw sample status may differ from the grounded projection because grounding takes precedence. Freshness expiration to `unknown` is **not** implemented as a worker or read-time calculation yet; the observation timestamp is available to that future workflow.
+The registry API includes read-only cumulative counters/fault flags. Raw sample status may differ from the grounded projection because grounding takes precedence. Registry GET/list responses and status filters calculate freshness at read time using `TELEMETRY_FRESHNESS` (default 30s). Unseen/stale drones show `unknown`; grounding takes precedence. Stored history and audit snapshots keep their original values.
 
 ## Rejections and responses
 
@@ -95,3 +95,20 @@ Accepted telemetry is its own immutable observation history; we do not duplicate
 ## Verification
 
 Go unit tests cover schema rejection and canonicalization. Database integration tests use real TimescaleDB in isolated schemas to verify ownership/roles, malformed and invalid records, exact/conflicting/concurrent duplicates, late arrival, counter ordering, sticky grounding, history pagination, append-only records, rollback on projection/rejection-log failures, and organisation deletion. Run all backend checks with `TEST_DATABASE_URL` set and `go test -race ./...`, followed by `go vet ./...` and `go build ./...`. CI's integration suite includes telemetry.
+
+
+## Batch storage and retention
+
+`IngestBatch` accepts 1–100 samples for one bound drone, returns per-record
+acceptance/rejection results, and commits the entire write atomically. Pending
+records participate in temporal counter checks. It uses COPY for accepted
+samples/receipts/rejections and emits `new_telemetry` notifications only after
+commit. Consumers must enforce tenant scope and recover missed events by reading
+history. ArduPilot's operator command calls the batch path directly.
+
+Sample retention is 90 days with compression after seven days; operators can
+configure both through `configure_telemetry_storage`. Identity receipts survive
+sample retention, so old identical retries remain idempotent, while new old
+observations cannot resurrect expired history. The latest projection preserves
+the cumulative-counter boundary after retention. Battery rating configuration
+uses an audited repository method; maintenance rules/alerts remain later work.

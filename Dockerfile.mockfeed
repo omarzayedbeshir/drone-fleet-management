@@ -1,8 +1,8 @@
 # Mock vendor feed for docker-compose / demos. (Not built in CI yet.)
-FROM golang:1.22-alpine AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /src
-COPY go.mod ./
-COPY . .
+COPY backend/go.mod backend/go.sum ./
+COPY backend/ .
 RUN CGO_ENABLED=0 go build -o /out/mockfeed ./cmd/mockfeed
 
 FROM alpine:3.20

@@ -90,26 +90,37 @@ func run() error {
 		}
 	}()
 	slog.Info("ArduPilot adapter starting", "endpoint", *endpoint, "drone_id", *drone, "system_id", *system, "component_id", *component)
-	err = adapter.Run(ctx, func(ctx context.Context, sample telemetry.Sample) error {
+	err = adapter.RunBatch(ctx, func(ctx context.Context, samples []telemetry.Sample) ([]error, error) {
 		attempt, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		if err := checkActor(attempt, pool, org, *actor); err != nil {
-			return err
+			return nil, err
 		}
-		raw, err := json.Marshal(sample)
+		raws := make([][]byte, len(samples))
+		for i, sample := range samples {
+			var err error
+			raws[i], err = json.Marshal(sample)
+			if err != nil {
+				return nil, &adapters.PermanentError{Err: err}
+			}
+		}
+		results, err := store.IngestBatch(attempt, org, *actor, *drone, raws)
 		if err != nil {
-			return &adapters.PermanentError{Err: err}
+			return nil, err
 		}
-		result, err := store.Ingest(attempt, org, *actor, *drone, raw)
-		if err != nil {
-			return err
+		outcomes := make([]error, len(results))
+		for i, result := range results {
+			if result.Rejection != nil {
+				outcomes[i] = result.Rejection
+				continue
+			}
+			accepted++
+			slog.Info("ArduPilot telemetry accepted", "event_id", samples[i].EventID, "duplicate", result.Result.Duplicate)
 		}
-		accepted++
-		slog.Info("ArduPilot telemetry accepted", "event_id", sample.EventID, "duplicate", result.Duplicate, "latest_updated", result.LatestUpdated)
 		if *limit > 0 && accepted >= *limit {
 			stop()
 		}
-		return nil
+		return outcomes, nil
 	})
 	data, _ := json.Marshal(adapter.Health())
 	slog.Info("ArduPilot final health", "health", string(data))
