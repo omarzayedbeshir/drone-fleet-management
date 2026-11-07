@@ -863,6 +863,116 @@ paths:
           $ref: '#/components/responses/Unavailable'
         '415':
           $ref: '#/components/responses/UnsupportedMediaType'
+  /api/v1/drones/{id}/battery-cycles:
+    parameters:
+    - $ref: '#/components/parameters/DroneID'
+    get:
+      tags:
+      - Telemetry
+      x-implementation-status: implemented
+      security:
+      - SessionCookie: []
+      operationId: getCycleBaseline
+      summary: Read battery-cycle provenance
+      x-allowed-roles:
+      - fleet_manager
+      - pilot
+      - maintenance_technician
+      description: Own-tenant aircraft only. Existing unverified totals remain unknown
+        until documented or provided by an eligible source. ArduPilot/SITL echoes preserve
+        baseline provenance. Telemetry and simulation labels describe the source, not
+        independently verified hardware measurements.
+      responses:
+        '200':
+          description: Current cumulative drone total and provenance; this does not
+            report individual battery-pack history.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleBaselineResponse'
+              example:
+                battery_cycles:
+                  total: 0
+                  source: unknown
+                  recorded_at: null
+                  revision: 0
+                  note: ''
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    put:
+      tags:
+      - Telemetry
+      x-implementation-status: implemented
+      security:
+      - SessionCookie: []
+      operationId: recordCycleBaseline
+      summary: Record an audited cumulative cycle baseline
+      x-allowed-roles:
+      - fleet_manager
+      - maintenance_technician
+      description: Own-tenant active manager or technician only. Requires a source/reference
+        and matching expected total/revision. Totals cannot decrease. The reading, durable
+        temporal boundary, current provenance, connector baseline revision and before/after
+        audit commit atomically. Telemetry freshness, flight counters and grounding
+        are unchanged. Old managed workers are immediately fenced and active workers
+        reload the baseline asynchronously. Historical telemetry and future observations
+        must respect manual boundaries; exact accepted retries remain idempotent.
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      x-max-body-bytes: 4096
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CycleReading'
+            example:
+              total: 207
+              expected_total: 0
+              expected_revision: 0
+              reason: Verified service log B-207
+      responses:
+        '200':
+          description: Current cumulative drone total and provenance; this does not
+            report individual battery-pack history.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleBaselineResponse'
+              example:
+                battery_cycles:
+                  total: 0
+                  source: unknown
+                  recorded_at: null
+                  revision: 0
+                  note: ''
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '409':
+          description: Total/revision changed, total decreased, or reading contradicts
+            known future observations. Reload before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
 components:
   securitySchemes:
     SessionCookie:
@@ -1590,6 +1700,69 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ConnectorProfile'
+    CycleBaseline:
+      type: object
+      additionalProperties: false
+      required:
+      - total
+      - source
+      - recorded_at
+      - revision
+      - note
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        source:
+          enum:
+          - unknown
+          - telemetry
+          - simulated
+          - manual
+        recorded_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        revision:
+          type: integer
+          minimum: 0
+        note:
+          type: string
+          maxLength: 500
+    CycleReading:
+      type: object
+      additionalProperties: false
+      required:
+      - total
+      - expected_total
+      - expected_revision
+      - reason
+      properties:
+        total:
+          type: integer
+          minimum: 0
+          maximum: 1000000000
+        expected_total:
+          type: integer
+          minimum: 0
+        expected_revision:
+          type: integer
+          minimum: 0
+        reason:
+          type: string
+          minLength: 5
+          maxLength: 500
+          description: Trimmed, single-line human source or reference; control characters
+            are rejected.
+    CycleBaselineResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - battery_cycles
+      properties:
+        battery_cycles:
+          $ref: '#/components/schemas/CycleBaseline'
 x-nfr-08:
   implemented:
   - ArduPilot MAVLink adapter verified against SITL (separate operator process)

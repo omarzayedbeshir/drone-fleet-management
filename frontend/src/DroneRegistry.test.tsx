@@ -14,6 +14,7 @@ const page = (drones: Drone[] = [aircraft], more = false, offset = 0) => json({ 
 function server(extra?: (url: URL, init: RequestInit) => Response | undefined) {
   const fetch = vi.fn(async (input: string | URL | Request, init: RequestInit = {}) => {
     const url = new URL(String(input), 'http://localhost');
+    if (url.pathname.endsWith('/battery-cycles')) return json({ battery_cycles: { total: 0, source: 'unknown', recorded_at: null, revision: 0, note: '' } });
     if (url.pathname.endsWith('/connector')) return json({ connector: null, profiles: [] });
     const response = extra?.(url, init);
     if (response) return response;

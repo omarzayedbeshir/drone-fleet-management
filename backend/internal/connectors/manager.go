@@ -119,7 +119,7 @@ func (m *Manager) serve(ctx context.Context, leader *pgxpool.Conn, poll time.Dur
 		}
 		for id, w := range workers {
 			b, ok := wanted[id]
-			if !ok || b.Generation != w.binding.Generation || b.Serial != w.binding.Serial || b.Vendor != w.binding.Vendor || !b.Active {
+			if !ok || b.Generation != w.binding.Generation || b.BaselineRevision != w.binding.BaselineRevision || b.Serial != w.binding.Serial || b.Vendor != w.binding.Vendor || !b.Active {
 				stop(w)
 				delete(workers, id)
 			}

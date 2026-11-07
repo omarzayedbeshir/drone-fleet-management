@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/telemetry"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -53,6 +54,9 @@ func NewAuthenticatedHandler(config AuthConfig) (http.Handler, error) {
 	}
 	if config.Telemetry != nil {
 		registerTelemetry(mux, a, config.Telemetry)
+		if cycleStore, ok := config.Telemetry.(telemetry.CycleBaselineStore); ok {
+			registerCycleBaselines(mux, a, cycleStore)
+		}
 	}
 	if config.Connectors != nil {
 		registerConnectors(mux, a, config.Connectors)
