@@ -18,6 +18,8 @@ import (
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/vendor"
 )
 
+const permanentSourceFailure = "Permanent source configuration failure"
+
 type Config struct {
 	Source             vendor.VendorAdapter
 	Serial             string
@@ -27,10 +29,12 @@ type Config struct {
 	RetryMin, RetryMax time.Duration
 }
 type Adapter struct {
-	cfg     Config
-	mu      sync.Mutex
-	health  adapters.Health
-	running atomic.Bool
+	cfg    Config
+	mu     sync.Mutex
+	health adapters.Health
+	// Protected by mu; terminal source failure takes priority over buffered writes.
+	permanentFailure bool
+	running          atomic.Bool
 }
 
 var _ adapters.VendorAdapter = (*Adapter)(nil)
@@ -61,6 +65,9 @@ func (a *Adapter) Health() adapters.Health {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	h := a.health
+	if a.permanentFailure {
+		h.LastError = permanentSourceFailure
+	}
 	h.Connected = a.running.Load() && h.Connected
 	h.Ready = h.Connected && !h.LastEmitted.IsZero() && time.Since(h.LastEmitted) < 10*time.Second
 	return h
@@ -73,6 +80,7 @@ func (a *Adapter) Run(parent context.Context, emit adapters.Emit) error {
 		return errors.New("adapter already running")
 	}
 	defer a.running.Store(false)
+	a.change(func(h *adapters.Health) { a.permanentFailure = false; h.LastError = "" })
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	q, _ := buffer.New(a.cfg.Capacity)
@@ -102,7 +110,11 @@ func (a *Adapter) Run(parent context.Context, emit adapters.Emit) error {
 		for {
 			err = emit(ctx, sample)
 			if err == nil {
-				a.change(func(h *adapters.Health) { h.Accepted++; h.LastEmitted = time.Now(); h.LastError = "" })
+				a.change(func(h *adapters.Health) {
+					h.Accepted++
+					h.LastEmitted = time.Now()
+					h.LastError = ""
+				})
 				break
 			}
 			if ctx.Err() != nil {
@@ -182,7 +194,7 @@ func (a *Adapter) produce(ctx context.Context, q *buffer.Buffer) error {
 			return nil
 		}
 		if errors.Is(err, vendor.ErrPermanent) {
-			a.change(func(h *adapters.Health) { h.LastError = "Permanent source configuration failure" })
+			a.change(func(h *adapters.Health) { a.permanentFailure = true; h.LastError = permanentSourceFailure })
 			slog.Error("Permanent telemetry source failure", "vendor", a.cfg.Vendor)
 			return err
 		}
