@@ -12,7 +12,7 @@ From the repository root, start a separate simulator:
 ./backend/scripts/run-sitl.sh /absolute/path/to/ardupilot
 ```
 
-The helper runs ArduCopter with its built-in physics, instance 20, Cairo home coordinates, and MAVLink TCP port 15760. The default state directory is `backend/.local/sitl` (ignored by Git), preserving EEPROM/statistics and boot count across runs. `SITL_STATE_DIR` can select another state directory. No arming, takeoff, or movement command is sent by the adapter/helper. This is simulated telemetry, not physical-aircraft verification.
+The helper runs ArduCopter with its built-in physics, instance 20, Nile Delta home coordinates northeast of Tanta (30.85°N, 31.05°E), and MAVLink TCP port 15760. The default state directory is `backend/.local/sitl` (ignored by Git), preserving EEPROM/statistics and boot count across runs. `SITL_STATE_DIR` can select another state directory. No arming, takeoff, or movement command is sent by the adapter/helper. This is simulated telemetry, not physical-aircraft verification.
 
 To generate changing positions after connecting the adapter, use the separate [SITL flight demo](../docs/SITL_DEMO.md#5-fly-the-simulation): `python3 backend/scripts/fly-sitl.py` from the repository root. It verifies the isolated simulator, uses its secondary control port, flies a short square pattern, and lands. Flight-control commands remain outside the telemetry adapter and web API.
 

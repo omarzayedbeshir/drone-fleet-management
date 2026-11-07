@@ -22,6 +22,7 @@ import (
 func main() {
 	out := flag.String("out", "testdata/dji_sample.csv", "output file")
 	drones := flag.Int("drones", 3, "number of drones")
+	flightOffset := flag.Int64("flight-offset", 0, "Seconds added to cumulative flight counters for a later demo recording")
 	start := flag.String("start", "2026-10-20T09:00:00Z", "First UTC timestamp (RFC3339); choose a recent past time for new demos")
 	rounds := flag.Int("rounds", 40, "samples per drone")
 	flag.Parse()
@@ -32,7 +33,7 @@ func main() {
 	}
 	// Deterministic clock: every call advances 500 ms.
 	t, err := time.Parse(time.RFC3339, *start)
-	if err != nil || *drones < 1 || *drones > 26 || *rounds < 1 || *rounds > 100000 {
+	if err != nil || *flightOffset < 0 || *flightOffset > 1000000000 || *drones < 1 || *drones > 26 || *rounds < 1 || *rounds > 100000 {
 		log.Fatal("valid start, 1–26 drones and 1–100000 rounds required")
 	}
 	now := func() time.Time { t = t.Add(500 * time.Millisecond); return t }
@@ -45,6 +46,7 @@ func main() {
 	close(ch)
 	var recs []vendor.RawRecord
 	for r := range ch {
+		r.Payload["total_flight_time"] = r.Payload["total_flight_time"].(float64) + float64(*flightOffset)
 		recs = append(recs, r)
 	}
 

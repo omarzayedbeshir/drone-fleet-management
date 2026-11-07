@@ -64,10 +64,11 @@ func newGenerator(ids []string, seed int64, now func() time.Time, imagery bool) 
 		drones:  make(map[string]*droneState, len(ids)),
 		imagery: imagery,
 	}
+	// Synthetic demo area: Nile Delta farmland northeast of Tanta, Egypt.
 	for i, id := range ids {
 		g.drones[id] = &droneState{
-			lat:         30.0444 + float64(i)*0.01,
-			lon:         31.2357 + float64(i)*0.01,
+			lat:         30.85 + float64(i)*0.01,
+			lon:         31.05 + float64(i)*0.01,
 			battery:     100 - float64(g.rng.Intn(30)),
 			cycles:      float64(20 + g.rng.Intn(200)),
 			flightTime:  float64(3600 * (1 + g.rng.Intn(100))),
