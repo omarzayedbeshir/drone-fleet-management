@@ -18,7 +18,7 @@ The map always displays the latest loaded readings and GPS positions. Recent tra
 
 GPS loss, gaps over 30 seconds, and date-line crossings break the line. Drones without GPS are not placed at a default coordinate. If a new observation lacks GPS, the map retains the last GPS point in the loaded window with its own timestamp, while other readings come from the latest observation. Observation and GPS timestamps indicate the age of the readings; recent readings do not prove connection health. Unknown values remain “Not reported”; zero remains a valid value.
 
-Reported status is separate from the registry's grounded projection and cannot clear a maintenance restriction. Battery cycles are stored totals; the SITL adapter does not measure new cycles. Stationary SITL will stay stationary. Movement requires changing coordinates from the simulator/source; the UI sends no flight-control commands.
+The selected aircraft’s current fleet status is fetched from the registry on each map refresh, using the server’s configured freshness policy. It becomes Unknown when telemetry expires (normally after 30 seconds); a failed status request displays Unavailable. Last reported status remains the immutable historical observation, including In mission after a source stops. Current grounding takes precedence and cannot be cleared by a reported observation. Battery cycles are stored totals; the SITL adapter does not measure new cycles. Stationary SITL will stay stationary. Movement requires changing coordinates from the simulator/source; the UI sends no flight-control commands.
 
 ## Basemap and verification
 
