@@ -1,0 +1,13 @@
+[
+  {
+    "id": "module-starter",
+    "label": "Synthetic adapter module",
+    "source": "external",
+    "vendor": "example_vendor",
+    "vendor_label": "Example vendor (synthetic)",
+    "simulated": true,
+    "executable": "./adapter.py",
+    "arguments": [],
+    "queue_size": 32
+  }
+]

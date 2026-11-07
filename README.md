@@ -119,4 +119,12 @@ Select **Show map** in the registry for stored positions, recent trails and tele
 
 See [stack and single-node server decisions](docs/ARCHITECTURE.md), [the R-15 spike result](docs/spikes/R15.md), and [the review workflow](docs/REVIEWING.md). `main` requires a pull request and passing backend, frontend, database, and OpenAPI checks. Other contributors need Omar's code-owner approval; Omar has an account-specific review bypass.
 
-For a walkthrough from UI registration to simulated telemetry, use the [SITL demo and troubleshooting guide](docs/SITL_DEMO.md). Registering a drone does not start a connection: the adapter runs separately, and the fleet table uses manual refresh while the map offers automatic live polling.
+For a walkthrough from UI registration to simulated telemetry, use the [SITL demo and troubleshooting guide](docs/SITL_DEMO.md). Registering a drone creates no connection until a fleet manager selects a source profile and enables it in aircraft details. The API supervises saved connections automatically; see [connector management](docs/CONNECTORS.md). Standalone adapter commands remain available for diagnostics. The fleet table uses manual refresh while the map offers automatic live polling.
+
+## Sprint 1 status and adapter extensions
+
+See [Sprint 1 implementation/evidence status](docs/SPRINT1_STATUS.md), the
+[adapter module guide](docs/ADAPTER_MODULES.md), and the
+[DJI source contract](docs/DJI_SOURCE_CONTRACT.md). Trusted operator-installed
+modules register vendor metadata and use the existing normalized schema; the
+registry discovers display/registration choices from its server catalog.

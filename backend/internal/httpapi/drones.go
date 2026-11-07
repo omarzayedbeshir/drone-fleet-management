@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/auth"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/catalog"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/drones"
 )
 
@@ -40,6 +42,8 @@ func droneError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, drones.ErrNotFound):
 		writeError(w, http.StatusNotFound, "Drone not found")
+	case errors.Is(err, drones.ErrUnsupported):
+		writeError(w, 400, "Select an installed vendor")
 	case errors.Is(err, drones.ErrConflict):
 		writeError(w, http.StatusConflict, "Drone conflicts with an existing serial number or a related record")
 	default:
@@ -124,7 +128,17 @@ func (d *droneHandler) list(w http.ResponseWriter, r *http.Request) {
 		droneError(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"drones": items, "pagination": map[string]any{"limit": f.Limit, "offset": f.Offset, "has_more": more}})
+	vendors := catalog.Builtins
+	if provider, ok := d.store.(interface {
+		Catalog(context.Context) ([]catalog.Vendor, error)
+	}); ok {
+		vendors, err = provider.Catalog(r.Context())
+		if err != nil {
+			droneError(w, err)
+			return
+		}
+	}
+	writeJSON(w, 200, map[string]any{"vendors": vendors, "drones": items, "pagination": map[string]any{"limit": f.Limit, "offset": f.Offset, "has_more": more}})
 }
 
 func parseDroneFilter(r *http.Request, f *drones.Filter) (string, error) {
@@ -152,7 +166,7 @@ func parseDroneFilter(r *http.Request, f *drones.Filter) (string, error) {
 			f.Offset = n
 		case "vendor":
 			if !drones.ValidVendor(value) {
-				return "", errors.New("vendor must be dji or ardupilot")
+				return "", errors.New("vendor must be a normalized vendor code")
 			}
 			f.Vendor = value
 		case "status":

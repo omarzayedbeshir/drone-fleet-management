@@ -1,0 +1,23 @@
+[
+  {
+    "id": "demo-dji-csv",
+    "label": "Nile Delta DJI recording",
+    "source": "csv",
+    "vendor": "dji",
+    "simulated": true,
+    "csv_path": "testdata/dji_sample.csv",
+    "speed": 10,
+    "queue_size": 32
+  },
+  {
+    "id": "demo-sitl",
+    "label": "Local ArduPilot SITL",
+    "source": "ardupilot",
+    "vendor": "ardupilot",
+    "simulated": true,
+    "endpoint": "tcp://127.0.0.1:15760",
+    "system_id": 1,
+    "component_id": 1,
+    "queue_size": 32
+  }
+]

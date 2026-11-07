@@ -86,7 +86,7 @@ func (n *Normalizer) Normalize(r telemetry.RawRecord) (telemetry.Sample, error) 
 		keys   []string
 	}{
 		{&s.Latitude, []string{"latitude", "latitude_deg", "lat"}}, {&s.Longitude, []string{"longitude", "longitude_deg", "lon", "lng"}},
-		{&s.AltitudeM, []string{"altitude_m", "height", "altitude"}}, {&s.SpeedMPS, []string{"speed_mps", "horizontal_speed", "ground_speed_mps", "groundspeed"}},
+		{&s.AltitudeM, []string{"altitude_m", "altitude"}}, {&s.SpeedMPS, []string{"speed_mps", "horizontal_speed", "ground_speed_mps", "groundspeed"}},
 		{&s.BatteryPercent, []string{"battery_percent", "battery_capacity_percent", "battery_remaining", "battery"}},
 	} {
 		v := first(r, field.keys...)
@@ -97,6 +97,15 @@ func (n *Normalizer) Normalize(r telemetry.RawRecord) (telemetry.Sample, error) 
 			}
 			*field.target = &f
 		}
+	}
+	// DJI Cloud API height is ellipsoidal, not MSL. Only a source declaring
+	// an MSL height (our synthetic recording format) may use this alias.
+	if s.AltitudeM == nil && r["height"] != nil && r["height_reference"] == "msl" {
+		f, ok := number(r["height"])
+		if !ok {
+			return s, fmt.Errorf("invalid height")
+		}
+		s.AltitudeM = &f
 	}
 	// Native MAVLink lat/lon are scaled integers regardless of their magnitude.
 	if s.Source == "ardupilot" {

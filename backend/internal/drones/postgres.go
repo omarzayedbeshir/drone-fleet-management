@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/audit"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/catalog"
 )
 
 type PostgresStore struct {
@@ -78,6 +79,9 @@ func (s *PostgresStore) Create(ctx context.Context, org, actor string, m Metadat
 		return Drone{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err := installedVendor(ctx, tx, m.Vendor); err != nil {
+		return Drone{}, err
+	}
 	d, err := scanDrone(tx.QueryRow(ctx, `INSERT INTO drones (organisation_id,name,vendor,model,serial_number)
   VALUES ($1,$2,$3,$4,$5) RETURNING `+columns, org, m.Name, m.Vendor, m.Model, m.SerialNumber))
 	if err != nil {
@@ -136,6 +140,9 @@ func (s *PostgresStore) Update(ctx context.Context, org, actor, id string, p Pat
 		return Drone{}, err
 	}
 	m := p.Apply(before)
+	if err := installedVendor(ctx, tx, m.Vendor); err != nil {
+		return Drone{}, err
+	}
 	after, err := scanDrone(tx.QueryRow(ctx, `UPDATE drones SET name=$3,vendor=$4,model=$5,serial_number=$6
   WHERE organisation_id=$1 AND id=$2 RETURNING `+columns, org, id, m.Name, m.Vendor, m.Model, m.SerialNumber))
 	if err != nil {
@@ -164,4 +171,31 @@ func (s *PostgresStore) Delete(ctx context.Context, org, actor, id string) error
 		return err
 	}
 	return translateError(tx.Commit(ctx))
+}
+
+func installedVendor(ctx context.Context, tx pgx.Tx, code string) error {
+	var exists bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM supported_vendors WHERE code=$1)`, code).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return ErrUnsupported
+	}
+	return nil
+}
+func (s *PostgresStore) Catalog(ctx context.Context) ([]catalog.Vendor, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT code,label FROM supported_vendors ORDER BY label,code`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []catalog.Vendor{}
+	for rows.Next() {
+		var v catalog.Vendor
+		if err = rows.Scan(&v.Code, &v.Label); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/catalog"
 	"strings"
 	"time"
 	"unicode"
@@ -11,8 +12,9 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("drone not found")
-	ErrConflict = errors.New("drone conflicts with an existing record")
+	ErrNotFound    = errors.New("drone not found")
+	ErrUnsupported = errors.New("vendor is not installed")
+	ErrConflict    = errors.New("drone conflicts with an existing record")
 )
 
 type Drone struct {
@@ -56,7 +58,7 @@ type Store interface {
 	Delete(context.Context, string, string, string) error
 }
 
-func ValidVendor(value string) bool { return value == "dji" || value == "ardupilot" }
+func ValidVendor(value string) bool { return catalog.ValidVendor(value) }
 func ValidStatus(value string) bool {
 	switch value {
 	case "available", "charging", "in_mission", "grounded", "unknown":
@@ -78,7 +80,7 @@ func normalizeField(field, value string) (string, error) {
 	if field == "vendor" {
 		value = strings.ToLower(value)
 		if !ValidVendor(value) {
-			return "", errors.New("vendor must be dji or ardupilot")
+			return "", errors.New("vendor must be a normalized vendor code")
 		}
 	}
 	return value, nil

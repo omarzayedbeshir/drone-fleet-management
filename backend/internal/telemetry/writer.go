@@ -48,6 +48,23 @@ func (s *PostgresStore) IngestBatch(ctx context.Context, org, actor, id string, 
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
+	items, err := s.IngestBatchTx(ctx, tx, org, actor, id, raws)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+// IngestBatchTx joins a caller-owned transaction. The caller must commit or roll
+// back; validation, receipts, projection and notifications remain atomic.
+func (s *PostgresStore) IngestBatchTx(ctx context.Context, tx pgx.Tx, org, actor, id string, raws [][]byte) ([]BatchItem, error) {
+	if len(raws) < 1 || len(raws) > MaxBatch {
+		return nil, reject("invalid_sample", "Provide 1–100 telemetry records")
+	}
+	var err error
 	var vendor, status string
 	var latest *time.Time
 	var flight, cycles int64
@@ -197,9 +214,6 @@ func (s *PostgresStore) IngestBatch(ctx context.Context, org, actor, id string, 
 		if _, err := tx.Exec(ctx, `SELECT pg_notify($1,$2)`, NewTelemetryChannel, string(payload)); err != nil {
 			return nil, err
 		}
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
 	}
 	return items, nil
 }

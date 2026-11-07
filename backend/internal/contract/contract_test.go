@@ -14,7 +14,7 @@ import (
 )
 
 func fixture() telemetry.RawRecord {
-	return telemetry.RawRecord{"source": "dji", "device_sn": "DJI-001", "timestamp": "2026-11-07T08:00:00Z", "latitude": 30., "longitude": 31., "height": 50., "horizontal_speed": 5.5, "battery_capacity_percent": 1., "total_flight_time": 3600., "battery_loop_times": 20., "fault_codes": "GPS;MOTOR"}
+	return telemetry.RawRecord{"source": "dji", "device_sn": "DJI-001", "timestamp": "2026-11-07T08:00:00Z", "latitude": 30., "longitude": 31., "height": 50., "height_reference": "msl", "horizontal_speed": 5.5, "battery_capacity_percent": 1., "total_flight_time": 3600., "battery_loop_times": 20., "fault_codes": "GPS;MOTOR"}
 }
 func TestCommonContract(t *testing.T) {
 	r := fixture()
@@ -90,5 +90,34 @@ func TestBufferBackpressureAndOwnership(t *testing.T) {
 	got, _ := q.Dequeue(context.Background())
 	if got["fault_flags"].([]string)[0] != "GPS" {
 		t.Fatal("buffer aliases input")
+	}
+}
+
+func TestDJIHeightDatum(t *testing.T) {
+	r := fixture()
+	delete(r, "height_reference")
+	s, err := normalize.New().Normalize(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.AltitudeM != nil {
+		t.Fatal("ellipsoidal/unknown DJI height was labelled MSL")
+	}
+	r["altitude_m"] = 42.
+	s, err = normalize.New().Normalize(r)
+	if err != nil || s.AltitudeM == nil || *s.AltitudeM != 42 {
+		t.Fatalf("explicit MSL altitude lost: %+v %v", s, err)
+	}
+}
+func TestNativeBatteryCountIsNotInventedAsDroneLifetimeCount(t *testing.T) {
+	// Shape follows DJI's documented battery.batteries[].loop_times. A pack's
+	// count cannot be silently substituted for a cumulative aircraft counter.
+	r := telemetry.RawRecord{"source": "dji", "device_sn": "TEST-DJI", "timestamp": "2026-11-07T08:00:00Z", "latitude": 30.85, "longitude": 31.05, "height": 80., "total_flight_time": 3600., "battery": map[string]any{"capacity_percent": 85., "batteries": []any{map[string]any{"sn": "SYNTHETIC-PACK", "loop_times": 20}}}}
+	clean, err := privacy.NewFilter().Process(context.Background(), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = normalize.New().Normalize(clean); err == nil {
+		t.Fatal("invented a drone lifetime count from unprocessed battery data")
 	}
 }

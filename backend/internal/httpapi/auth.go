@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/auth"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/connectors"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/drones"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/telemetry"
 	"golang.org/x/crypto/bcrypt"
@@ -24,6 +25,7 @@ type AuthConfig struct {
 	Store         auth.Store
 	Registry      drones.Store
 	Telemetry     telemetry.Store
+	Connectors    connectors.Store
 	Origin        string
 	SecureCookies bool
 }

@@ -3,7 +3,7 @@ import type { DroneStatus } from './drones';
 
 export interface TelemetrySample {
   event_id: string;
-  source: 'ardupilot' | 'dji' | 'csv';
+  source: string;
   observed_at: string;
   received_at: string;
   status: DroneStatus;
