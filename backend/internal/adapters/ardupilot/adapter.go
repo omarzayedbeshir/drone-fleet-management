@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 	"strconv"
@@ -114,6 +115,25 @@ func (a *Adapter) Run(ctx context.Context, emit adapters.Emit) error {
 	if emit == nil {
 		return errors.New("an ingestion callback is required")
 	}
+	return a.RunBatch(ctx, func(ctx context.Context, samples []telemetry.Sample) ([]error, error) {
+		outcomes := make([]error, len(samples))
+		for i, sample := range samples {
+			outcomes[i] = emit(ctx, sample)
+			if outcomes[i] != nil {
+				var permanent *adapters.PermanentError
+				var rejection *telemetry.Rejection
+				if !errors.As(outcomes[i], &permanent) && !errors.As(outcomes[i], &rejection) && !errors.Is(outcomes[i], telemetry.ErrNotFound) {
+					return nil, outcomes[i]
+				}
+			}
+		}
+		return outcomes, nil
+	})
+}
+func (a *Adapter) RunBatch(ctx context.Context, emit func(context.Context, []telemetry.Sample) ([]error, error)) error {
+	if emit == nil {
+		return errors.New("an ingestion callback is required")
+	}
 	if !a.running.CompareAndSwap(false, true) {
 		return errors.New("adapter is already running")
 	}
@@ -128,7 +148,7 @@ func (a *Adapter) Run(ctx context.Context, emit adapters.Emit) error {
 	defer cancel()
 	queue := make(chan telemetry.Sample, a.config.QueueSize)
 	workerDone := make(chan struct{})
-	go func() { defer close(workerDone); a.deliver(workerCtx, queue, emit) }()
+	go func() { defer close(workerDone); a.deliverBatch(workerCtx, queue, emit) }()
 	defer func() { cancel(); <-workerDone }()
 	normal := newNormalizer(a.config)
 	poll := time.NewTicker(5 * time.Second)
@@ -249,6 +269,7 @@ func (a *Adapter) enqueue(queue chan<- telemetry.Sample, sample telemetry.Sample
 	select {
 	case queue <- sample:
 	default:
+		slog.Warn("Telemetry queue full; new observation dropped")
 		a.change(func(h *adapters.Health) { h.Dropped++; h.LastError = "Telemetry queue full; new observation dropped" })
 	}
 }

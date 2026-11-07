@@ -15,6 +15,16 @@ import (
 )
 
 const MaxBody = 16384
+const MaxBatch = 100
+
+type BatchItem struct {
+	Result    *Result
+	Rejection *Rejection
+}
+
+type BatchStore interface {
+	IngestBatch(context.Context, string, string, string, [][]byte) ([]BatchItem, error)
+}
 
 var ErrNotFound = errors.New("drone not found")
 

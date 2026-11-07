@@ -84,3 +84,10 @@ it('keeps the map and readings visible during refresh, updates in place, and ret
   expect(mapNode).toHaveTextContent('updated');
   expect(screen.getByText('112.0 m')).toBeInTheDocument();
 });
+
+
+it('labels recorded telemetry as simulated', async () => {
+  server([{ ...sample('recorded', 0), source: 'csv' }]);
+  render(<FleetMap drones={[drone]} />);
+  expect(await screen.findByText('Simulated / recorded telemetry')).toBeInTheDocument();
+});

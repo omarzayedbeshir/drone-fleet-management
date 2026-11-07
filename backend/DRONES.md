@@ -121,3 +121,10 @@ Tests create and remove isolated schemas; they do not use or change existing dro
 After sign-in, tenant users see the drone registry. Apply search/vendor/status filters with **Apply filters**; clear them to return to the full fleet. Use **View**, **Edit**, or **Remove** on a row; mutation controls are available only to managers. Registration resets filters and returns to the first page. Edits send only changed metadata fields, preserving omitted fields if another user updates the same drone. The UI keeps form values on validation/conflict errors, asks for confirmation before removal, and sends expired sessions back to sign-in. Status and telemetry timestamps are displayed without editable controls. There is no background polling that would extend idle sessions.
 
 Frontend checks: `cd frontend && npm test` and `npm run build`. Component tests mock the HTTP boundary; PostgreSQL-backed server tests separately verify tenant/role enforcement. Browser checks use disposable accounts and synthetic aircraft.
+
+
+Registry GET/list and status filters apply `TELEMETRY_FRESHNESS` (30s by
+default) to last-observed time. Stale or unseen aircraft show `unknown`, with
+grounded aircraft preserved. This read-time view does not modify stored/audited
+status. Refresh the registry to update its status snapshot; map polling reads
+historical observations and does not refresh the registry table.

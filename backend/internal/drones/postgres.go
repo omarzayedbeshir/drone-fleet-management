@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -12,12 +13,29 @@ import (
 )
 
 type PostgresStore struct {
-	Pool     *pgxpool.Pool
-	Recorder audit.Recorder
+	Pool      *pgxpool.Pool
+	Recorder  audit.Recorder
+	Freshness time.Duration
+	Now       func() time.Time
 }
 
 const columns = `id::text, organisation_id::text, name, vendor, model, serial_number,
  status, last_telemetry_at, created_at, updated_at, flight_time_seconds, battery_cycles, fault_flags`
+
+// Read-time freshness never mutates stored projections or audit snapshots.
+const liveStatus = `CASE WHEN status <> 'grounded' AND (last_telemetry_at IS NULL OR last_telemetry_at < $7) THEN 'unknown' ELSE status END`
+
+func (s *PostgresStore) cutoff() time.Time {
+	now := time.Now()
+	if s.Now != nil {
+		now = s.Now()
+	}
+	threshold := s.Freshness
+	if threshold <= 0 {
+		threshold = 30 * time.Second
+	}
+	return now.Add(-threshold)
+}
 
 type scanner interface{ Scan(...any) error }
 
@@ -77,10 +95,10 @@ func (s *PostgresStore) Create(ctx context.Context, org, actor string, m Metadat
 func (s *PostgresStore) List(ctx context.Context, org string, f Filter) ([]Drone, bool, error) {
 	// Treat the search term literally, rather than allowing SQL wildcard expansion.
 	query := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(f.Query)
-	rows, err := s.Pool.Query(ctx, `SELECT `+columns+` FROM drones
-  WHERE organisation_id=$1 AND ($2='' OR vendor=$2) AND ($3='' OR status=$3)
+	rows, err := s.Pool.Query(ctx, `SELECT `+strings.Replace(columns, " status,", " "+liveStatus+",", 1)+` FROM drones
+  WHERE organisation_id=$1 AND ($2='' OR vendor=$2) AND ($3='' OR (`+liveStatus+`)=$3)
   AND ($4='' OR name ILIKE '%' || $4 || '%' OR model ILIKE '%' || $4 || '%' OR serial_number ILIKE '%' || $4 || '%')
-  ORDER BY created_at DESC, id DESC LIMIT $5 OFFSET $6`, org, f.Vendor, f.Status, query, f.Limit+1, f.Offset)
+  ORDER BY created_at DESC, id DESC LIMIT $5 OFFSET $6`, org, f.Vendor, f.Status, query, f.Limit+1, f.Offset, s.cutoff())
 	if err != nil {
 		return nil, false, err
 	}
@@ -104,7 +122,7 @@ func (s *PostgresStore) List(ctx context.Context, org string, f Filter) ([]Drone
 }
 
 func (s *PostgresStore) Get(ctx context.Context, org, id string) (Drone, error) {
-	return scanDrone(s.Pool.QueryRow(ctx, `SELECT `+columns+` FROM drones WHERE organisation_id=$1 AND id=$2`, org, id))
+	return scanDrone(s.Pool.QueryRow(ctx, `SELECT `+strings.Replace(columns, " status,", " "+strings.ReplaceAll(liveStatus, "$7", "$3")+",", 1)+` FROM drones WHERE organisation_id=$1 AND id=$2`, org, id, s.cutoff()))
 }
 
 func (s *PostgresStore) Update(ctx context.Context, org, actor, id string, p Patch) (Drone, error) {
