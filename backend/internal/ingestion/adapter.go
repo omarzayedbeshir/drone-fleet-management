@@ -18,6 +18,8 @@ import (
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/vendor"
 )
 
+const permanentSourceFailure = "Permanent source configuration failure"
+
 type Config struct {
 	Source             vendor.VendorAdapter
 	Serial             string
@@ -102,7 +104,13 @@ func (a *Adapter) Run(parent context.Context, emit adapters.Emit) error {
 		for {
 			err = emit(ctx, sample)
 			if err == nil {
-				a.change(func(h *adapters.Health) { h.Accepted++; h.LastEmitted = time.Now(); h.LastError = "" })
+				a.change(func(h *adapters.Health) {
+					h.Accepted++
+					h.LastEmitted = time.Now()
+					if h.LastError != permanentSourceFailure {
+						h.LastError = ""
+					}
+				})
 				break
 			}
 			if ctx.Err() != nil {
@@ -182,7 +190,7 @@ func (a *Adapter) produce(ctx context.Context, q *buffer.Buffer) error {
 			return nil
 		}
 		if errors.Is(err, vendor.ErrPermanent) {
-			a.change(func(h *adapters.Health) { h.LastError = "Permanent source configuration failure" })
+			a.change(func(h *adapters.Health) { h.LastError = permanentSourceFailure })
 			slog.Error("Permanent telemetry source failure", "vendor", a.cfg.Vendor)
 			return err
 		}
