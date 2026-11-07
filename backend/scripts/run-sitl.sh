@@ -18,5 +18,5 @@ mkdir -p -- "$state_dir"
 cd -- "$state_dir"
 echo "SITL state: $PWD; MAVLink TCP port: 15760 (adapter endpoint tcp://127.0.0.1:15760)"
 exec "$binary" --model + --instance 20 --serial0 tcp:15760 \
-    --home 30.0444,31.2357,100,0 --speedup 1 \
+    --home 30.85,31.05,10,0 --speedup 1 \
     --defaults "$ardupilot_root/Tools/autotest/default_params/copter.parm"

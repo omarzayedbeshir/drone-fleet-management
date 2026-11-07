@@ -56,7 +56,8 @@ go run ./cmd/vendor-adapter -source csv -csv testdata/dji_sample.csv \
 ```
 
 The committed fixture contains 40 observations each for three simulated drones.
-It is generated data, not a recording from real DJI hardware. Its `height`
+It is generated data over Nile Delta farmland northeast of Tanta (30.85°N,
+31.05°E), not a recording from real DJI hardware. Its `height`
 column represents MSL metres in this fixture. Stored `source=csv` and the map's
 “Simulated / recorded telemetry” label identify the fallback. Original observation
 timestamps are preserved; old recordings appear stale, never current. Replaying
@@ -67,7 +68,7 @@ a new generated sample, choose a UTC start time sufficiently in the past that
 all generated observations are within the five-minute future tolerance:
 
 ```sh
-go run ./cmd/gensample -start 2026-11-07T08:00:00Z -out /tmp/dji-demo.csv
+go run ./cmd/gensample -start 2026-11-07T08:00:00Z -flight-offset 3600 -out /tmp/dji-demo.csv
 ```
 
 Use a fresh registered drone for a new simulated run whose generated cumulative
@@ -139,3 +140,10 @@ fixture reaches history, repeats idempotently, and stays tenant scoped; mixed
 batch outcomes, migrations, freshness and battery audit rollback are checked
 alongside the existing authentication, telemetry and MAVLink transport tests.
 Real SITL remains opt-in with `SITL_MAVLINK_ENDPOINT` and `TEST_DATABASE_URL`.
+
+The relocated committed fixture starts on 2026-11-07 at 08:00 UTC and adds
+3600 cumulative flight seconds to the original generated counters. This lets
+it follow the original Tahrir recording on the same demo drone without reusing
+event identities or reducing counters. Old observations remain in history;
+they are not rewritten. SITL's default home uses the same Delta area; restart
+the simulator to use the new home.

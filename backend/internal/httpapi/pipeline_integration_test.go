@@ -36,7 +36,7 @@ func TestRecordedPipelineIntegration(t *testing.T) {
 	if err := pool.QueryRow(ctx, `INSERT INTO users(organisation_id,name,email,password_hash,role) VALUES($1,'Manager','pipeline@example.test','fixture-hash','fleet_manager') RETURNING id::text`, org).Scan(&actor); err != nil {
 		t.Fatal(err)
 	}
-	store := &telemetry.PostgresStore{Pool: pool, Now: func() time.Time { return time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC) }}
+	store := &telemetry.PostgresStore{Pool: pool, Now: func() time.Time { return time.Date(2026, 11, 8, 0, 0, 0, 0, time.UTC) }}
 	source, err := csvreplay.New(csvreplay.Config{Path: filepath.Join("..", "..", "testdata", "dji_sample.csv"), Vendor: "dji"})
 	if err != nil {
 		t.Fatal(err)
