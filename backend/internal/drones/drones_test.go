@@ -13,7 +13,7 @@ func TestMetadataValidation(t *testing.T) {
 	if valid.Name != "Survey drone" || valid.Vendor != "dji" || valid.Model != "Mavic" || valid.SerialNumber != "AbC-123" {
 		t.Fatalf("bad normalization: %+v", valid)
 	}
-	for _, patch := range []Patch{{"name": ""}, {"name": " \t "}, {"model": strings.Repeat("é", 201)}, {"serial_number": "SN\x00"}, {"vendor": "csv"}, {"vendor": "unsupported"}, {"name": "hello\nworld"}, {"status": "available"}, {"organisation_id": "other"}, {"last_telemetry_at": "now"}, {}} {
+	for _, patch := range []Patch{{"name": ""}, {"name": " \t "}, {"model": strings.Repeat("é", 201)}, {"serial_number": "SN\x00"}, {"vendor": "csv"}, {"vendor": "unsupported!"}, {"name": "hello\nworld"}, {"status": "available"}, {"organisation_id": "other"}, {"last_telemetry_at": "now"}, {}} {
 		if err := patch.NormalizeValidate(); err == nil {
 			t.Fatalf("accepted invalid patch: %+v", patch)
 		}

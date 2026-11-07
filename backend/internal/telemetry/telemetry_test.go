@@ -44,7 +44,7 @@ func TestNormalizedSchema(t *testing.T) {
 func TestInvalidTelemetry(t *testing.T) {
 	for name, changes := range map[string]map[string]any{
 		"missing flags": {"fault_flags": nil}, "missing counter": {"flight_time_seconds": nil}, "negative counter": {"battery_cycles": -1}, "fractional counter": {"flight_time_seconds": 1.5},
-		"missing event": {"event_id": ""}, "invalid event": {"event_id": "bad id"}, "source": {"source": "other"}, "status": {"status": "flying"},
+		"missing event": {"event_id": ""}, "invalid event": {"event_id": "bad id"}, "source": {"source": "other!"}, "status": {"status": "flying"},
 		"timestamp": {"observed_at": "not a timestamp"}, "future": {"observed_at": "2026-10-29T12:06:00Z"}, "epoch": {"observed_at": "1969-12-31T23:59:59Z"},
 		"battery": {"battery_percent": 101}, "latitude": {"latitude": 91, "longitude": 31}, "longitude": {"latitude": 30, "longitude": 181},
 		"coordinate pair": {"latitude": 30}, "speed": {"speed_mps": -1}, "altitude": {"altitude_m": 100001}, "fault": {"fault_flags": []string{"has spaces"}},

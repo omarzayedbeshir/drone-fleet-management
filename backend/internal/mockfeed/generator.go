@@ -117,6 +117,7 @@ func (g *generator) next(id string, rate float64, allowed []MalformedKind) (map[
 		"timestamp":        float64(g.now().UTC().UnixMilli()), // epoch milliseconds
 		"latitude":         round(d.lat, 6),
 		"longitude":        round(d.lon, 6),
+		"height_reference": "msl", // explicitly synthetic MSL data, not native DJI ellipsoid height
 		"height":           40 + 10*float64(d.step%5),
 		"horizontal_speed": 5.5,
 		"vertical_speed":   0.0,

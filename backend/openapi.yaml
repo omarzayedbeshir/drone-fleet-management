@@ -759,6 +759,110 @@ paths:
         '503':
           $ref: '#/components/responses/Unavailable'
       x-max-body-bytes: 16384
+  /api/v1/drones/{id}/connector:
+    parameters:
+    - $ref: '#/components/parameters/DroneID'
+    get:
+      tags:
+      - Connectors
+      x-implementation-status: implemented
+      security:
+      - SessionCookie: []
+      operationId: getDroneConnector
+      summary: Read managed connection and eligible source profiles
+      x-allowed-roles:
+      - fleet_manager
+      - pilot
+      - maintenance_technician
+      description: 'Tenant-owned drone only. An unconfigured drone returns connector:
+        null. Runtime status is a timestamped snapshot; stale supervisors show stopped
+        after ten seconds. Shared profiles are simulated; live profiles are restricted
+        to their operator-configured organisation.'
+      responses:
+        '200':
+          description: Connector settings, allowed profiles and last observed worker
+            health. Private endpoints, paths, actor IDs and credential references are
+            omitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectorView'
+              example:
+                connector: null
+                profiles:
+                - id: demo-dji-csv
+                  label: Nile Delta DJI recording
+                  source: csv
+                  vendor: dji
+                  simulated: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    put:
+      tags:
+      - Connectors
+      x-implementation-status: implemented
+      security:
+      - SessionCookie: []
+      operationId: saveDroneConnector
+      summary: Save, restart or disable a managed connection
+      x-allowed-roles:
+      - fleet_manager
+      description: Fleet manager only. Save a trusted operator profile reference; arbitrary
+        endpoints, paths and secrets are forbidden. Every save advances the generation
+        and atomically audits settings. Enabled settings start or restart a worker;
+        disabled settings fence old-generation writes before the response completes.
+        Supervision begins asynchronously. CSV completion persists until another save;
+        enabled continuous sources resume after supervisor restart. An existing unavailable
+        profile may still be disabled.
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      x-max-body-bytes: 4096
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectorSettings'
+            example:
+              profile_id: demo-dji-csv
+              enabled: true
+      responses:
+        '200':
+          description: Connector settings, allowed profiles and last observed worker
+            health. Private endpoints, paths, actor IDs and credential references are
+            omitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectorView'
+              example:
+                connector: null
+                profiles:
+                - id: demo-dji-csv
+                  label: Nile Delta DJI recording
+                  source: csv
+                  vendor: dji
+                  simulated: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
 components:
   securitySchemes:
     SessionCookie:
@@ -817,8 +921,7 @@ components:
       in: query
       schema:
         $ref: '#/components/schemas/DroneStatus'
-      description: Exact stored operational status; at most once. No automatic stale-status expiry is implemented
-        yet.
+      description: Effective operational status including read-time stale/unseen expiry; at most once.
     Search:
       name: q
       in: query
@@ -945,10 +1048,10 @@ components:
       - maintenance_technician
     Vendor:
       type: string
-      enum:
-      - dji
-      - ardupilot
-      description: Supported registry vendor codes. CSV is a fallback/test ingestion format, not a vendor.
+      pattern: '^[a-z][a-z0-9_]{0,31}$'
+      not:
+        const: csv
+      description: Operator-installed vendor code from the registry response catalog. CSV is a simulated test/fallback source, not a vendor.
     DroneStatus:
       description: Registry reads compute unknown for stale/unseen telemetry (configurable threshold, default 30s); grounded takes precedence. Historical sample status is preserved.
       type: string
@@ -1206,6 +1309,19 @@ components:
       - drones
       - pagination
       properties:
+        vendors:
+          type: array
+          description: Installed vendor metadata for registration, filtering and display.
+          items:
+            type: object
+            additionalProperties: false
+            required: [code, label]
+            properties:
+              code:
+                $ref: '#/components/schemas/Vendor'
+              label:
+                type: string
+
         drones:
           type: array
           items:
@@ -1337,6 +1453,143 @@ components:
           - vendor_mismatch
           - counter_regression
           - body_too_large
+    ConnectorProfile:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - label
+      - source
+      - vendor
+      - simulated
+      properties:
+        id:
+          type: string
+          pattern: ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$
+        label:
+          type: string
+        source:
+          enum:
+          - csv
+          - dji
+          - ardupilot
+          - external
+        vendor:
+          $ref: '#/components/schemas/Vendor'
+        simulated:
+          type: boolean
+    ConnectorHealth:
+      type: object
+      additionalProperties: false
+      required:
+      - ready
+      - connected
+      - last_heartbeat
+      - last_frame
+      - last_emitted
+      - accepted
+      - rejected
+      - dropped
+      - parse_errors
+      properties:
+        ready:
+          type: boolean
+        connected:
+          type: boolean
+        last_heartbeat:
+          type: string
+          format: date-time
+        last_frame:
+          type: string
+          format: date-time
+        last_emitted:
+          type: string
+          format: date-time
+        accepted:
+          type: integer
+          minimum: 0
+        rejected:
+          type: integer
+          minimum: 0
+        dropped:
+          type: integer
+          minimum: 0
+        parse_errors:
+          type: integer
+          minimum: 0
+        last_error:
+          type: string
+    ConnectorSettings:
+      type: object
+      additionalProperties: false
+      required:
+      - profile_id
+      - enabled
+      properties:
+        profile_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+        enabled:
+          type: boolean
+    Connector:
+      type: object
+      additionalProperties: false
+      required:
+      - drone_id
+      - profile_id
+      - enabled
+      - generation
+      - state
+      - health
+      - updated_at
+      - runtime_updated_at
+      properties:
+        drone_id:
+          type: string
+          format: uuid
+        profile_id:
+          type: string
+        enabled:
+          type: boolean
+        generation:
+          type: integer
+          minimum: 1
+        state:
+          enum:
+          - pending
+          - starting
+          - running
+          - retrying
+          - completed
+          - failed
+          - stopped
+          - disabled
+        health:
+          $ref: '#/components/schemas/ConnectorHealth'
+        updated_at:
+          type: string
+          format: date-time
+        runtime_updated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    ConnectorView:
+      type: object
+      additionalProperties: false
+      required:
+      - connector
+      - profiles
+      properties:
+        connector:
+          oneOf:
+          - $ref: '#/components/schemas/Connector'
+          - type: 'null'
+        profiles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectorProfile'
 x-nfr-08:
   implemented:
   - ArduPilot MAVLink adapter verified against SITL (separate operator process)

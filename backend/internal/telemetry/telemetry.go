@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/catalog"
 	"io"
 	"math"
 	"regexp"
@@ -104,8 +105,8 @@ func Decode(raw []byte, now time.Time) (Sample, error) {
 	if !eventPattern.MatchString(s.EventID) {
 		return s, reject("invalid_sample", "event_id must be a stable 1–128 character source identifier")
 	}
-	if s.Source != "dji" && s.Source != "ardupilot" && s.Source != "csv" {
-		return s, reject("invalid_sample", "source must be dji, ardupilot, or csv")
+	if !catalog.ValidSource(s.Source) {
+		return s, reject("invalid_sample", "source must be a normalized vendor code or csv")
 	}
 	switch s.Status {
 	case "available", "charging", "in_mission", "grounded", "unknown":

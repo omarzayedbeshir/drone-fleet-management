@@ -11,7 +11,7 @@ Keep Go, React/TypeScript, and TimescaleDB on one server for the MVP. The functi
 | Backend | Go 1.26+, standard `net/http`, `pgx/v5` | One API process with context cancellation, a bounded database pool, typed interfaces, and transactions shared by registry/audit writes. The module pins dependencies. |
 | Frontend | React + TypeScript; Vite for development/build | Existing fleet/authentication screens share the REST API. Production serves built static files; Vite is the development server. |
 | Storage | TimescaleDB 2.26.0 on PostgreSQL 17, pinned in Compose | One database supports relational tenant/registry/audit data and time-series telemetry. It avoids a separate telemetry datastore. |
-| Integration | Separate ArduPilot MAVLink worker; gomavlib v4 | One configured SITL endpoint per registered drone. The current worker calls the normalized ingestion store; connector management and staged pipeline integration remain team handoffs. |
+| Integration | API-supervised connectors and optional standalone diagnostic workers; gomavlib v4 | Saved tenant/drone profiles drive supervised CSV/DJI/MAVLink adapters. A shared privacy/normalization pipeline feeds transactional batch ingestion; a PostgreSQL leader lock prevents duplicate managed supervisors. |
 | Development | Docker Compose database, Go and Node tools on the host | The checked-in Compose file starts the database only. API/frontend/worker launch commands remain explicit. |
 | MVP hosting | One Linux server, one database instance | Co-locate static web serving/reverse proxy, API, workers, and database. No cluster or high availability. No cloud provider or paid service is required by this decision. |
 
@@ -23,7 +23,8 @@ flowchart LR
     subgraph host[Single MVP Linux server]
         proxy --> api[Go API]
         api --> db[(TimescaleDB)]
-        worker[ArduPilot worker] --> db
+        api --> worker[Managed source workers]
+        worker --> db
     end
     sitl[ArduPilot SITL] --> worker
 ```
@@ -37,8 +38,8 @@ Server sizing is undecided until the Sprint 2 workload test and measured databas
 - A single host failure stops the service. The 99% uptime target is a design target, not a demonstrated availability result.
 - A named Compose volume persists database files across container restarts. It is not an off-server backup or a tested disaster-recovery procedure.
 - Production needs restricted database credentials, HTTPS, backups and restore verification. The Compose database owner is for local development.
-- The ingestion store currently writes one normalized observation per transaction. Batch writing, retention/compression policies, rated battery-cycle tracking, and new-telemetry events remain Ziad's work.
-- The adapter's buffer is bounded and in memory. It does not establish durable queuing or complete connector/pipeline orchestration.
+- The ingestion store supports COPY batches, compression/retention policies, battery rating configuration, and committed new-telemetry notifications. See the ingestion and connector guides.
+- The adapter's buffer is bounded and in memory. It does not establish crash-durable queuing; saved connector configurations and runtime health are persisted independently.
 - Keep applied migrations immutable. Add a numbered migration for schema changes; the runner rejects checksum changes and serializes concurrent runs.
 
 ## Revisit triggers

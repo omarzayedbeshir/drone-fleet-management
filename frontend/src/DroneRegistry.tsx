@@ -1,3 +1,4 @@
+import { ConnectorPanel } from './ConnectorPanel';
 import { lazy, Suspense, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   droneApi, emptyFilters, normalizeMetadata, statusLabels, validateMetadata, vendorLabels,
@@ -32,6 +33,7 @@ export function DroneRegistry({ canManage }: { canManage: boolean }) {
   const [showMap, setShowMap] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const focusAfterRefresh = useRef(false);
+  const vendors = { ...vendorLabels, ...Object.fromEntries((page?.vendors ?? []).map(v => [v.code, v.label])) };
   const hasFilters = Boolean(filters.q || filters.vendor || filters.status);
 
   useEffect(() => {
@@ -98,7 +100,7 @@ export function DroneRegistry({ canManage }: { canManage: boolean }) {
           <label htmlFor="vendor-filter">Vendor</label>
           <select id="vendor-filter" value={draft.vendor} onChange={event => setDraft({ ...draft, vendor: event.target.value as Vendor | '' })}>
             <option value="">All vendors</option>
-            {Object.entries(vendorLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            {Object.entries(vendors).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </div>
         <div>
@@ -134,7 +136,7 @@ export function DroneRegistry({ canManage }: { canManage: boolean }) {
                 <tbody>{page.drones.map(drone => (
                   <tr key={drone.id}>
                     <th scope="row"><span className="aircraft-name">{drone.name}</span><span className="aircraft-model">{drone.model}</span></th>
-                    <td>{vendorLabels[drone.vendor]}</td>
+                    <td>{vendors[drone.vendor] ?? drone.vendor}</td>
                     <td className="serial">{drone.serial_number}</td>
                     <td><Status value={drone.status} /></td>
                     <td>{date(drone.last_telemetry_at)}</td>
@@ -163,8 +165,8 @@ export function DroneRegistry({ canManage }: { canManage: boolean }) {
           </>
         )}
       </div>
-      {selection?.mode === 'create' && <DroneEditor onClose={() => setSelection(null)} onSaved={drone => saved(drone, true)} />}
-      {selection && selection.mode !== 'create' && <DroneDialog key={`${selection.id}:${selection.mode}`} id={selection.id} mode={selection.mode} canManage={canManage}
+      {selection?.mode === 'create' && <DroneEditor vendors={vendors} onClose={() => setSelection(null)} onSaved={drone => saved(drone, true)} />}
+      {selection && selection.mode !== 'create' && <DroneDialog key={`${selection.id}:${selection.mode}`} id={selection.id} mode={selection.mode} vendors={vendors} canManage={canManage}
         onClose={() => setSelection(null)} onMode={mode => setSelection({ id: selection.id, mode })} onSaved={drone => saved(drone, false)} onRemoved={removed} />}
     </section>
   );
@@ -191,7 +193,7 @@ function Modal({ title, children, onClose, busy = false }: { title: string; chil
   );
 }
 
-function DroneEditor({ initial, onClose, onSaved }: { initial?: Drone; onClose: () => void; onSaved: (drone: Drone) => void }) {
+function DroneEditor({ initial, vendors, onClose, onSaved }: { initial?: Drone; vendors: Record<string, string>; onClose: () => void; onSaved: (drone: Drone) => void }) {
   const [values, setValues] = useState<DroneMetadata>(initial ? { name: initial.name, vendor: initial.vendor, model: initial.model, serial_number: initial.serial_number } : { name: '', vendor: 'dji', model: '', serial_number: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -218,7 +220,7 @@ function DroneEditor({ initial, onClose, onSaved }: { initial?: Drone; onClose: 
         <input id={`${prefix}-name`} autoFocus data-autofocus required maxLength={400} value={values.name} disabled={busy} onChange={event => setValues({ ...values, name: event.target.value })} />
         <label htmlFor={`${prefix}-vendor`}>Vendor</label>
         <select id={`${prefix}-vendor`} value={values.vendor} disabled={busy} onChange={event => setValues({ ...values, vendor: event.target.value as Vendor })}>
-          {Object.entries(vendorLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          {Object.entries(vendors).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
         <label htmlFor={`${prefix}-model`}>Model</label>
         <input id={`${prefix}-model`} required maxLength={400} value={values.model} disabled={busy} onChange={event => setValues({ ...values, model: event.target.value })} />
@@ -231,8 +233,8 @@ function DroneEditor({ initial, onClose, onSaved }: { initial?: Drone; onClose: 
   );
 }
 
-function DroneDialog({ id, mode, canManage, onClose, onMode, onSaved, onRemoved }: {
-  id: string; mode: 'view' | 'edit' | 'delete'; canManage: boolean; onClose: () => void;
+function DroneDialog({ id, mode, canManage, vendors, onClose, onMode, onSaved, onRemoved }: {
+  id: string; mode: 'view' | 'edit' | 'delete'; canManage: boolean; vendors: Record<string, string>; onClose: () => void;
   onMode: (mode: 'view' | 'edit' | 'delete') => void; onSaved: (drone: Drone) => void; onRemoved: (drone: Drone) => void;
 }) {
   const [drone, setDrone] = useState<Drone | null>(null);
@@ -245,6 +247,20 @@ function DroneDialog({ id, mode, canManage, onClose, onMode, onSaved, onRemoved 
     droneApi.get(id, controller.signal).then(data => { if (active) setDrone(data.drone); }).catch(error => { if (active) setError(message(error)); });
     return () => { active = false; controller.abort(); };
   }, [id, retry]);
+  useEffect(() => {
+    if (mode !== 'view') return;
+    const controller = new AbortController(); let active = true; let loading = false;
+    const timer = window.setInterval(async () => {
+      if (loading) return;
+      loading = true;
+      try {
+        const data = await droneApi.get(id, controller.signal);
+        if (active) setDrone(data.drone);
+      } catch { /* Keep the last loaded aircraft; connector health reports independently. */ }
+      finally { loading = false; }
+    }, 5000);
+    return () => { active = false; controller.abort(); window.clearInterval(timer); };
+  }, [id, mode]);
   async function remove() {
     if (!drone || busy) return;
     setBusy(true); setError('');
@@ -252,7 +268,7 @@ function DroneDialog({ id, mode, canManage, onClose, onMode, onSaved, onRemoved 
     catch (error) { setError(message(error)); }
     finally { setBusy(false); }
   }
-  if (mode === 'edit' && drone) return <DroneEditor initial={drone} onClose={onClose} onSaved={onSaved} />;
+  if (mode === 'edit' && drone) return <DroneEditor vendors={vendors} initial={drone} onClose={onClose} onSaved={onSaved} />;
   return (
     <Modal title={mode === 'delete' ? 'Remove drone?' : 'Aircraft details'} onClose={onClose} busy={busy}>
       {!drone ? error ? <><p role="alert" className="error">{error}</p><button className="secondary" onClick={() => setRetry(value => value + 1)}>Retry loading aircraft</button></> : <p role="status">Loading aircraft…</p> : mode === 'delete' ? (
@@ -265,11 +281,12 @@ function DroneDialog({ id, mode, canManage, onClose, onMode, onSaved, onRemoved 
         <>
           <p className="detail-name">{drone.name}</p>
           <dl className="drone-details">
-            <div><dt>Vendor</dt><dd>{vendorLabels[drone.vendor]}</dd></div><div><dt>Model</dt><dd>{drone.model}</dd></div>
+            <div><dt>Vendor</dt><dd>{vendors[drone.vendor] ?? drone.vendor}</dd></div><div><dt>Model</dt><dd>{drone.model}</dd></div>
             <div><dt>Serial number</dt><dd>{drone.serial_number}</dd></div><div><dt>Operational status</dt><dd><Status value={drone.status} /></dd></div>
             <div><dt>Last telemetry</dt><dd>{date(drone.last_telemetry_at)}</dd></div><div><dt>Registered</dt><dd>{date(drone.created_at)}</dd></div>
             <div><dt>Last edited</dt><dd>{date(drone.updated_at)}</dd></div>
           </dl>
+          <ConnectorPanel key={drone.id} droneId={drone.id} canManage={canManage} />
           <div className="dialog-actions">{canManage && <><button className="secondary" onClick={() => onMode('edit')}>Edit drone</button><button className="text-button danger-text" onClick={() => onMode('delete')}>Remove drone</button></>}<button onClick={onClose}>Done</button></div>
         </>
       )}

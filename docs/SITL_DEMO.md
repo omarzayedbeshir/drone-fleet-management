@@ -37,7 +37,7 @@ npm run dev
 
 Open `http://localhost:5173` and log in as a fleet manager. If you need an account, follow [account provisioning](../backend/AUTH.md#local-setup); use an existing account when available. In the registry, create a drone with vendor **ArduPilot** and a unique serial such as `AP-SITL-001`. Keep its lifetime flight and battery-cycle totals at their initial values for a fresh simulator.
 
-The fleet manager and drone must belong to the same organisation. A system administrator cannot substitute for the fleet manager in this workflow. Registration saves the inventory record; there is no UI Connect button yet.
+The fleet manager and drone must belong to the same organisation. A system administrator cannot substitute for the fleet manager in this workflow. Registration saves the inventory record. Select a managed source profile in aircraft details to enable automatic connection, or use the standalone adapter below for diagnostics; run one consumer at a time. See [connector management](CONNECTORS.md).
 
 ## 3. Start ArduCopter SITL
 
@@ -68,7 +68,7 @@ go run ./cmd/ardupilot-adapter \
 
 Replace the email and serial with your actual fleet manager and registered drone. The adapter resolves their UUIDs and organisation, then checks actor access before each ingestion attempt. Use one consumer per SITL TCP serial endpoint. Add `--max-samples 5` to stop after five accepted observations; omit it for continuous ingestion.
 
-Wait for `ArduPilot telemetry accepted` logs. Health appears every ten seconds; a socket connection alone does not mean ingestion is ready. Initial readings may lack GPS until a fresh 3D fix arrives. Refresh the fleet page or apply its filters to reload the latest readings. Select **Show map** for GPS positions and telemetry readings. The map refreshes automatically every five seconds to monitor new coordinates. There is no connector health panel; see [the map guide](../frontend/MAP.md).
+Wait for `ArduPilot telemetry accepted` logs. Health appears every ten seconds; a socket connection alone does not mean ingestion is ready. Initial readings may lack GPS until a fresh 3D fix arrives. Refresh the fleet page or apply its filters to reload the latest readings. Select **Show map** for GPS positions and telemetry readings. The map refreshes automatically every five seconds to monitor new coordinates. Managed connector health is available in aircraft details; standalone commands report health in their terminal. See [the map guide](../frontend/MAP.md).
 
 SITL flight time can remain zero while the simulated vehicle stays on the ground. Battery-cycle totals are preserved from the database; they are not measured from this feed. A stored grounded status remains grounded under the ingestion safety rule.
 
@@ -90,7 +90,7 @@ backend/.local/sitl-python/bin/pip install pymavlink
 backend/.local/sitl-python/bin/python backend/scripts/fly-sitl.py
 ```
 
-The map uses MSL altitude, so a 12-metre climb from the default 100-metre home appears near 112 metres. The flight is simulated; its measured positions are ingested into the registered simulation drone's history. After landing, the map retains the recent GPS trail. The map retains only its latest 100-observation window, not the entire flight. See [ArduPilot guided commands](https://ardupilot.org/dev/docs/copter-commands-in-guided-mode.html) for the protocol used by the controller.
+The map uses MSL altitude, so a 12-metre climb from the default 10-metre home appears near 22 metres. The flight is simulated; its measured positions are ingested into the registered simulation drone's history. After landing, the map retains the recent GPS trail. The map retains only its latest 100-observation window, not the entire flight. See [ArduPilot guided commands](https://ardupilot.org/dev/docs/copter-commands-in-guided-mode.html) for the protocol used by the controller.
 
 ## 6. Verify and stop
 

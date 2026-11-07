@@ -1,6 +1,6 @@
 # OpenAPI draft — NFR-08
 
-The canonical REST/JSON draft is [openapi.yaml](openapi.yaml), using OpenAPI 3.1.1. It documents the 12 implemented operations across health, authentication, drone registry, and normalized telemetry ingestion/history. It is a source artifact; this change adds no `/openapi` or Swagger UI route to the running server.
+The canonical REST/JSON draft is [openapi.yaml](openapi.yaml), using OpenAPI 3.1.1. It documents the 14 implemented operations across health, authentication, drone registry, normalized telemetry ingestion/history, and managed connector configuration/status. It is a source artifact; this change adds no `/openapi` or Swagger UI route to the running server.
 
 ## What is documented
 

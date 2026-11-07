@@ -80,6 +80,11 @@ def main() -> None:
         ("User", "internal/auth/auth.go", "User"),
         ("Drone", "internal/drones/drones.go", "Drone"),
         ("DroneCreate", "internal/drones/drones.go", "Metadata"),
+        ("Connector", "internal/connectors/store.go", "Connector"),
+        ("ConnectorSettings", "internal/connectors/store.go", "Settings"),
+        ("ConnectorView", "internal/connectors/store.go", "View"),
+        ("ConnectorProfile", "internal/connectors/profiles.go", "ProfileSummary"),
+        ("ConnectorHealth", "internal/adapters/adapter.go", "Health"),
     ]:
         assert set(components[name]["properties"]) == go_fields(filename, struct), f"{name} fields drifted from Go DTO"
     assert set(components["DronePatch"]["properties"]) == set(components["DroneCreate"]["properties"])

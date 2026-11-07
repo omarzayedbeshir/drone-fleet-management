@@ -14,6 +14,8 @@ import (
 
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/audit"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/auth"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/catalog"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/connectors"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/database"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/drones"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/httpapi"
@@ -51,8 +53,20 @@ func run() error {
 			return errors.New("TELEMETRY_FRESHNESS must be a positive duration")
 		}
 	}
+	profiles, err := connectors.LoadProfiles(os.Getenv("CONNECTOR_PROFILES_FILE"))
+	if err != nil {
+		return err
+	}
+	vendors, err := profiles.VendorDefinitions()
+	if err != nil {
+		return err
+	}
+	if err = catalog.Install(context.Background(), pool, vendors); err != nil {
+		return errors.New("cannot install adapter vendor catalog; apply migrations first")
+	}
+	connectorStore := &connectors.PostgresStore{Pool: pool, Profiles: profiles}
 	handler, err := httpapi.NewAuthenticatedHandler(httpapi.AuthConfig{
-		Store: &auth.PostgresStore{Pool: pool}, Registry: &drones.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}, Freshness: freshness}, Telemetry: &telemetry.PostgresStore{Pool: pool}, Origin: os.Getenv("APP_ORIGIN"), SecureCookies: secure,
+		Store: &auth.PostgresStore{Pool: pool}, Registry: &drones.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}, Freshness: freshness}, Telemetry: &telemetry.PostgresStore{Pool: pool}, Connectors: connectorStore, Origin: os.Getenv("APP_ORIGIN"), SecureCookies: secure,
 	})
 	if err != nil {
 		return err
@@ -66,6 +80,9 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	connectorDone := make(chan struct{})
+	go func() { defer close(connectorDone); (&connectors.Manager{Store: connectorStore}).Run(ctx) }()
+	defer func() { stop(); <-connectorDone }()
 	serveError := make(chan error, 1)
 	go func() { serveError <- server.ListenAndServe() }()
 	slog.Info("API listening", "address", addr)

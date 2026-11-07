@@ -58,7 +58,8 @@ go run ./cmd/vendor-adapter -source csv -csv testdata/dji_sample.csv \
 The committed fixture contains 40 observations each for three simulated drones.
 It is generated data over Nile Delta farmland northeast of Tanta (30.85°N,
 31.05°E), not a recording from real DJI hardware. Its `height`
-column represents MSL metres in this fixture. Stored `source=csv` and the map's
+column explicitly declares `height_reference=msl`; it represents MSL metres in
+this synthetic format, rather than native DJI ellipsoid height. Stored `source=csv` and the map's
 “Simulated / recorded telemetry” label identify the fallback. Original observation
 timestamps are preserved; old recordings appear stale, never current. Replaying
 an identical file deduplicates rather than inflating counters.
@@ -147,3 +148,10 @@ it follow the original Tahrir recording on the same demo drone without reusing
 event identities or reducing counters. Old observations remain in history;
 they are not rewritten. SITL's default home uses the same Delta area; restart
 the simulator to use the new home.
+
+## Managed operation
+
+For saved profiles, automatic supervision and visible worker status, use
+[connector management](CONNECTORS.md). Standalone commands above remain
+diagnostic tools; stop them before enabling a managed connector for the same
+aircraft.

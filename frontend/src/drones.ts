@@ -1,6 +1,7 @@
 import { apiRequest } from './api';
 
-export type Vendor = 'dji' | 'ardupilot';
+export type Vendor = string;
+export interface VendorDefinition { code: string; label: string }
 export type DroneStatus = 'available' | 'charging' | 'in_mission' | 'grounded' | 'unknown';
 export interface DroneMetadata {
   name: string;
@@ -18,6 +19,7 @@ export interface Drone extends DroneMetadata {
 }
 export interface DroneFilters { q: string; vendor: Vendor | ''; status: DroneStatus | ''; }
 export interface DronePage {
+  vendors?: VendorDefinition[];
   drones: Drone[];
   pagination: { limit: number; offset: number; has_more: boolean };
 }

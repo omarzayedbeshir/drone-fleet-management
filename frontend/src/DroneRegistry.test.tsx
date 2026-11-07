@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DroneRegistry } from './DroneRegistry';
@@ -14,6 +14,7 @@ const page = (drones: Drone[] = [aircraft], more = false, offset = 0) => json({ 
 function server(extra?: (url: URL, init: RequestInit) => Response | undefined) {
   const fetch = vi.fn(async (input: string | URL | Request, init: RequestInit = {}) => {
     const url = new URL(String(input), 'http://localhost');
+    if (url.pathname.endsWith('/connector')) return json({ connector: null, profiles: [] });
     const response = extra?.(url, init);
     if (response) return response;
     if (url.pathname.endsWith(aircraft.id)) return json({ drone: aircraft });
@@ -165,4 +166,36 @@ describe('drone registry', () => {
     expect(screen.queryByText('Survey 01')).not.toBeInTheDocument();
     expect(screen.getByText('New search result')).toBeInTheDocument();
   });
+});
+
+
+it('refreshes aircraft telemetry in an open details dialog and stops after closing', async () => {
+  vi.useFakeTimers();
+  try {
+    let latest = aircraft;
+    const fetch = server((url) => url.pathname.endsWith(aircraft.id) ? json({ drone: latest }) : undefined);
+    let unmount!: () => void;
+    await act(async () => { ({ unmount } = render(<DroneRegistry canManage />)); });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'View details for Survey 01' })));
+    const dialog = screen.getByRole('dialog', { name: 'Aircraft details' });
+    expect(within(dialog).getByText('Last telemetry').nextElementSibling).toHaveTextContent('No telemetry yet');
+    latest = { ...aircraft, last_telemetry_at: '2026-11-07T08:00:00Z' };
+    await act(async () => vi.advanceTimersByTime(5000));
+    expect(within(dialog).getByText('Last telemetry').nextElementSibling).not.toHaveTextContent('No telemetry yet');
+    unmount(); const count = fetch.mock.calls.length;
+    await act(async () => vi.advanceTimersByTime(10000));
+    expect(fetch).toHaveBeenCalledTimes(count);
+  } finally { vi.useRealTimers(); }
+});
+
+it('offers and displays an installed vendor from the server catalog without vendor-specific UI changes', async () => {
+  const user = userEvent.setup();
+  server(() => json({ drones: [{ ...aircraft, vendor: 'acceptance_vendor' }], vendors: [{ code: 'acceptance_vendor', label: 'Acceptance Vendor' }], pagination: { limit: 20, offset: 0, has_more: false } }));
+  render(<DroneRegistry canManage />);
+  await screen.findByText('Survey 01');
+  expect(screen.getByRole('cell', { name: 'Acceptance Vendor' })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Register drone' }));
+  const dialog = screen.getByRole('dialog', { name: 'Register drone' });
+  await user.selectOptions(within(dialog).getByLabelText('Vendor'), 'acceptance_vendor');
+  expect(within(dialog).getByLabelText('Vendor')).toHaveValue('acceptance_vendor');
 });

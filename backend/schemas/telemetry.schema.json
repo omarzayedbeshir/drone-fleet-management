@@ -18,12 +18,9 @@
       "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
     },
     "source": {
-      "enum": [
-        "dji",
-        "ardupilot",
-        "csv"
-      ],
-      "description": "Normalized source identity. csv is a testing/fallback format, not a supported drone vendor."
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,31}$",
+      "description": "Normalized vendor code, matched against the registered drone vendor at ingestion. csv is the explicitly simulated test/fallback source, not a vendor."
     },
     "observed_at": {
       "type": "string",
