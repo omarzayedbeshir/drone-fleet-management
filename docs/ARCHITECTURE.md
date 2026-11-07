@@ -47,3 +47,37 @@ Server sizing is undecided until the Sprint 2 workload test and measured databas
 Revisit sizing or process boundaries if the agreed 1,000-drone workload, history queries, or concurrent users miss the requirements. Revisit the single-server choice if measured availability or recovery needs require another host. Record measurements before changing the stack or claiming NFR-01/NFR-02 compliance.
 
 Implementation references: [Compose](../compose.yaml), [schema](../backend/SCHEMA.md), [authentication](../backend/AUTH.md), [telemetry](../backend/TELEMETRY.md), [SITL integration](../backend/ARDUPILOT.md).
+
+## Alignment with the submitted component UML
+
+The first alignment refactor introduces `internal/fleet.Service` between registry
+HTTP handlers and `drones.Store`. The service implements create, list, details,
+update and removal use cases. It derives tenant scope from the authenticated
+identity, enforces reader/manager permissions, normalizes and validates metadata,
+and discovers the installed vendor catalog through the repository capability.
+HTTP handlers retain request decoding, query parsing, session/origin protection
+and response/error mapping. Repositories retain database freshness evaluation,
+vendor/uniqueness constraints and atomic domain/audit transactions.
+
+This boundary is tested independently of HTTP, including forbidden callers,
+missing tenant identity, protected fields, normalized inputs, catalog errors and
+repository failures. Existing HTTP/database tests exercise the complete path.
+The refactor changes neither API contracts nor database schema.
+
+The following UML differences remain explicit follow-up work:
+
+- Raw-source and normalized streaming adapter contracts still coexist. Unifying
+  them must preserve MAVLink clock/state handling, privacy before buffering,
+  backpressure, cancellation and external-module protocol compatibility.
+- ArduPilot normalizes inside its adapter rather than the generic raw pipeline.
+- Validation, duplicate checks and writing share one transaction. Their logical
+  responsibilities can be separated without breaking that transaction boundary.
+- Freshness is evaluated on repository reads; it is not a background process
+  that mutates stored status. The map polls current registry status separately
+  from immutable historical reports.
+- Dashboard updates use REST polling. Committed PostgreSQL notifications provide
+  the event boundary for future consumers, not a current browser subscription.
+
+The UML describes the full application, including later-sprint services. This
+alignment work does not claim scheduling, maintenance rules, notification or AI
+services, live DJI compatibility, or encrypted credential storage as complete.
