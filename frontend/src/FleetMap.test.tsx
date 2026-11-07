@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { FleetMap } from './FleetMap';
-import type { Drone } from './drones';
+import { droneApi, type Drone } from './drones';
 import type { TelemetrySample } from './telemetry';
 
 vi.mock('./TelemetryMap', () => ({ TelemetryMap: ({ aircraft, selectedPosition }: { aircraft: unknown[]; selectedPosition?: TelemetrySample }) => <div data-testid="map-output">{aircraft.length} positioned · {selectedPosition?.event_id ?? 'no GPS'}</div> }));
@@ -14,6 +14,7 @@ function server(samples: TelemetrySample[]) {
   vi.stubGlobal('fetch', fetch);
   return fetch;
 }
+beforeEach(() => { vi.spyOn(droneApi, 'get').mockResolvedValue({ drone }); });
 afterEach(() => vi.useRealTimers());
 
 it('preserves observation timestamps and last GPS without inventing unknown values', async () => {
@@ -90,4 +91,22 @@ it('labels recorded telemetry as simulated', async () => {
   server([{ ...sample('recorded', 0), source: 'csv' }]);
   render(<FleetMap drones={[drone]} />);
   expect(await screen.findByText('Simulated / recorded telemetry')).toBeInTheDocument();
+});
+
+it('expires current mission status while preserving the last reported mission and GPS', async () => {
+  server([{ ...sample('mission', 0), status: 'in_mission' }]);
+  const get = vi.mocked(droneApi.get);
+  get.mockResolvedValueOnce({ drone: { ...drone, status: 'in_mission' } });
+  vi.useFakeTimers();
+  await act(async () => { render(<FleetMap drones={[drone]} />); });
+  expect(screen.getByText('Current fleet status:').textContent).toContain('In mission');
+  get.mockResolvedValueOnce({ drone: { ...drone, status: 'unknown' } });
+  await act(async () => vi.advanceTimersByTime(5000));
+  expect(screen.getByText('Current fleet status:').textContent).toContain('Unknown');
+  expect(screen.getByText(/No recent telemetry/)).toBeInTheDocument();
+  expect(screen.getByText('Last reported status').nextElementSibling).toHaveTextContent('In mission');
+  expect(screen.getByTestId('map-output')).toHaveTextContent('mission');
+  get.mockRejectedValueOnce(new Error('offline'));
+  await act(async () => vi.advanceTimersByTime(5000));
+  expect(screen.getByText('Current fleet status:').textContent).toContain('Unavailable');
 });

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Drone } from './drones';
-import { statusLabels } from './drones';
+import { droneApi, statusLabels } from './drones';
 import { positions, readTelemetry, type TelemetrySample } from './telemetry';
 import { TelemetryMap } from './TelemetryMap';
 
@@ -55,6 +55,18 @@ export function FleetMap({ drones }: { drones: Drone[] }) {
   }, [loading, refresh]);
 
   const selected = drones.find(drone => drone.id === selectedId) ?? drones[0];
+  const [current, setCurrent] = useState<{ id: string; status?: Drone['status']; error?: string } | null>(null);
+  useEffect(() => {
+    if (!selected) return;
+    const controller = new AbortController(); let active = true;
+    void droneApi.get(selected.id, controller.signal).then(({ drone }) => {
+      if (active) setCurrent({ id: selected.id, status: drone.status });
+    }).catch(() => {
+      if (active) setCurrent({ id: selected.id, error: 'Current fleet status unavailable.' });
+    });
+    return () => { active = false; controller.abort(); };
+  }, [selected?.id, refresh]);
+  const currentStatus = current?.id === selected?.id ? current : null;
   const feed = selected ? feeds[selected.id] : undefined;
   const history = feed?.samples ?? [];
   const points = useMemo(() => positions(history), [history]);
@@ -86,13 +98,17 @@ export function FleetMap({ drones }: { drones: Drone[] }) {
         <select id="map-aircraft" value={selected?.id ?? ''} onChange={event => setSelectedId(event.target.value)}>{drones.map(drone => <option key={drone.id} value={drone.id}>{drone.name}</option>)}</select>
         {selected && <>
           <h4>{selected.name}</h4><p className="serial">{selected.serial_number}</p>
+          <p>Current fleet status: <strong>{currentStatus?.status ? statusLabels[currentStatus.status] : currentStatus?.error ? 'Unavailable' : 'Checking…'}</strong></p>
+          {currentStatus?.error && <p className="error">{currentStatus.error}</p>}
+          {currentStatus?.status === 'unknown' && <p className="map-notice">No recent telemetry. The readings and position below are historical; the aircraft’s current activity is unknown.</p>}
+          {currentStatus?.status === 'grounded' && <p className="map-notice">Grounded in the registry. Reported telemetry does not clear this restriction.</p>}
           {feed?.error && <p className="error" role="alert">{feed.error}{sample ? ' Showing the last loaded readings.' : ''}</p>}
           {!sample ? <p className="map-notice">{loading && !hasSnapshot ? 'Waiting for telemetry…' : 'No telemetry received. Start the adapter for this aircraft.'}</p> : <>
             <p className="telemetry-time">Latest observation<br /><time dateTime={sample.observed_at}>{timestamp(sample.observed_at)}</time></p>
             {sample.source === 'csv' && <p className="map-notice">Simulated / recorded telemetry</p>}
-            <p className="muted">Historical readings. Refresh the registry to check current fleet status.</p>
+            <p className="muted">Last stored observation. Reported status describes the aircraft at that time, not its current connection.</p>
             <dl className="telemetry-readings">
-              <div><dt>Reported status</dt><dd>{statusLabels[sample.status]}</dd></div>
+              <div><dt>Last reported status</dt><dd>{statusLabels[sample.status]}</dd></div>
               <div><dt>Battery</dt><dd>{measurement(sample.battery_percent, '%')}</dd></div>
               <div><dt>Altitude · MSL</dt><dd>{measurement(sample.altitude_m, 'm')}</dd></div>
               <div><dt>Speed</dt><dd>{measurement(sample.speed_mps, 'm/s')}</dd></div>
