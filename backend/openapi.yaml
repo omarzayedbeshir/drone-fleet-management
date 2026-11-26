@@ -28,6 +28,8 @@ tags:
   description: Normalized manual ingestion and accepted observation history.
 - name: Missions
   description: Organisation-scoped scheduling and pilot assignments.
+- name: Audit
+  description: Read-only review of recorded organisation events.
 security:
 - SessionCookie: []
 paths:
@@ -1139,6 +1141,51 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /api/v1/audit-events:
+    get:
+      operationId: listAuditEvents
+      tags: [Audit]
+      description: Fleet managers see their own organisation's events. System administrators must select an organisation. Results are ordered by descending event ID.
+      x-implementation-status: implemented
+      x-allowed-roles: [fleet_manager, system_administrator]
+      parameters:
+      - name: organisation_id
+        in: query
+        description: Required for system administrators and prohibited for fleet managers.
+        schema: {type: string, format: uuid}
+      - name: resource_type
+        in: query
+        schema: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+      - name: before_id
+        in: query
+        description: Pagination cursor from the prior page.
+        schema: {type: string, pattern: '^[1-9][0-9]*$'}
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 100, default: 25}
+      responses:
+        '200':
+          description: Audit events and the cursor for the next page, if any.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, next_before_id]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditHistoryEntry'
+                  next_before_id:
+                    type: [string, 'null']
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
 components:
   securitySchemes:
     SessionCookie:
@@ -2012,6 +2059,19 @@ components:
                   enum: [available, charging, in_mission, grounded, unknown]
         pagination:
           $ref: '#/components/schemas/Pagination'
+    AuditHistoryEntry:
+      type: object
+      required: [id, organisation_id, actor_id, resource_type, resource_id, action, before_data, after_data, created_at]
+      properties:
+        id: {type: string, pattern: '^[1-9][0-9]*$'}
+        organisation_id: {type: string, format: uuid}
+        actor_id: {type: string, format: uuid}
+        resource_type: {type: string}
+        resource_id: {type: string, format: uuid}
+        action: {type: string}
+        before_data: {type: [object, 'null']}
+        after_data: {type: [object, 'null']}
+        created_at: {type: string, format: date-time}
 x-nfr-08:
   implemented:
   - ArduPilot MAVLink adapter verified against SITL (separate operator process)

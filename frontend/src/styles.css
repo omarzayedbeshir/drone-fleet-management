@@ -212,3 +212,13 @@ form button { margin-top: 12px; }
 @media (max-width: 540px) {
   .mission-fields { grid-template-columns: minmax(0, 1fr); }
 }
+
+.audit-events { margin-top: 16px; }
+.audit-event + .audit-event { border-top: 1px solid var(--line); }
+.audit-event { padding: 12px 16px; }
+.audit-event summary { cursor: pointer; }
+.audit-event summary span { display: inline-flex; flex-wrap: wrap; gap: 6px 18px; }
+.audit-event summary time { color: var(--muted); }
+.audit-event dd { margin: 0; overflow-wrap: anywhere; }
+.audit-identifiers, .audit-snapshots { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); gap: 12px; }
+.audit-snapshots pre { padding: 12px; margin-bottom: 0; white-space: pre-wrap; overflow-wrap: anywhere; background: #f5f5f0; }

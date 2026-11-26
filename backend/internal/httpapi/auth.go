@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/audit"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/auth"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/connectors"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/drones"
@@ -23,6 +24,7 @@ import (
 const cookieName = "aerosync_session"
 
 type AuthConfig struct {
+	AuditHistory  audit.HistoryReader
 	Store         auth.Store
 	Registry      drones.Store
 	Missions      missions.Store

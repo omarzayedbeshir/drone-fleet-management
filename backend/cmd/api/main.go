@@ -68,7 +68,8 @@ func run() error {
 	connectorStore := &connectors.PostgresStore{Pool: pool, Profiles: profiles}
 	handler, err := httpapi.NewAuthenticatedHandler(httpapi.AuthConfig{
 		Store: &auth.PostgresStore{Pool: pool}, Registry: &drones.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}, Freshness: freshness}, Telemetry: &telemetry.PostgresStore{Pool: pool}, Connectors: connectorStore, Origin: os.Getenv("APP_ORIGIN"), SecureCookies: secure,
-		Missions: &missions.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}, Freshness: freshness},
+		AuditHistory: audit.PostgresHistory{Pool: pool},
+		Missions:     &missions.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}, Freshness: freshness},
 	})
 	if err != nil {
 		return err

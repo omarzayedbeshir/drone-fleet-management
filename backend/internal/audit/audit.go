@@ -47,7 +47,7 @@ var _ Recorder = PostgresRecorder{}
 var resourcePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 var actionPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,99}$`)
 
-func validID(id string) bool {
+func ValidID(id string) bool {
 	var uuid pgtype.UUID
 	return len(id) == 36 && id[8] == '-' && id[13] == '-' && id[18] == '-' && id[23] == '-' && uuid.Scan(id) == nil && uuid.Valid
 }
@@ -71,7 +71,7 @@ func (PostgresRecorder) Record(ctx context.Context, tx pgx.Tx, event Event) erro
 	if tx == nil {
 		return errors.New("audit recording requires an existing transaction")
 	}
-	if !validID(event.OrganisationID) || !validID(event.ActorID) || !validID(event.ResourceID) {
+	if !ValidID(event.OrganisationID) || !ValidID(event.ActorID) || !ValidID(event.ResourceID) {
 		return errors.New("audit organisation, actor, and resource IDs must be UUIDs")
 	}
 	if !resourcePattern.MatchString(event.ResourceType) || !actionPattern.MatchString(string(event.Action)) {
