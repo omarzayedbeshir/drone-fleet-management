@@ -82,10 +82,26 @@ func TestFleetQAIntegration(t *testing.T) {
 		if !json.Valid(schema) {
 			t.Fatal("expected a valid structured output schema")
 		}
-		if strings.Contains(input, "Foreign aircraft") || !strings.Contains(input, "Local aircraft") || strings.Contains(input, org) ||
-			strings.Contains(input, "Private local location") || !strings.Contains(input, `"type":"mission"`) ||
-			!strings.Contains(input, `"type":"telemetry"`) || !strings.Contains(input, `"next_observed_status":"charging"`) {
-			t.Fatalf("unexpected provider data: %s", input)
+		var prompt struct {
+			Question string
+			Sources  []json.RawMessage
+		}
+		if err := json.Unmarshal([]byte(input), &prompt); err != nil || len(prompt.Sources) != 3 {
+			t.Fatalf("unexpected provider request: %s", input)
+		}
+		for _, record := range prompt.Sources {
+			raw := string(record)
+			if !strings.Contains(raw, "Local aircraft") || strings.Contains(raw, org) ||
+				strings.Contains(raw, other) || strings.Contains(raw, "Private local location") {
+				t.Fatalf("provider received an incorrect source: %s", raw)
+			}
+		}
+		telemetry := string(prompt.Sources[2])
+		if !strings.Contains(telemetry, `"type":"telemetry"`) || !strings.Contains(telemetry, `"next_observed_status":"charging"`) {
+			t.Fatalf("unexpected telemetry source: %s", telemetry)
+		}
+		if prompt.Question == "When did Foreign aircraft last fly?" {
+			return `{"answer":"","source_numbers":[]}`, nil
 		}
 		switch calls {
 		case 1:
@@ -122,6 +138,9 @@ func TestFleetQAIntegration(t *testing.T) {
 	request(auth.FleetManager, question, 200, `"number":3`)
 	request(auth.FleetManager, question, 200, `"status":"unavailable"`)
 	request(auth.FleetManager, question, 200, `"status":"unavailable"`)
+	request(auth.FleetManager, `{"question":"When did Foreign aircraft last fly?"}`, 200,
+		`"status":"insufficient_data","answer":"","sources":[]`)
+	attempted := calls
 	day := time.Now().UTC().Truncate(24 * time.Hour)
 	var attempts sync.WaitGroup
 	results := make(chan bool, fleetqa.DailyLimit)
@@ -142,11 +161,11 @@ func TestFleetQAIntegration(t *testing.T) {
 			granted++
 		}
 	}
-	if granted != fleetqa.DailyLimit-3 {
-		t.Fatalf("quota granted %d further attempts, want %d", granted, fleetqa.DailyLimit-3)
+	if granted != fleetqa.DailyLimit-attempted {
+		t.Fatalf("quota granted %d further attempts, want %d", granted, fleetqa.DailyLimit-attempted)
 	}
 	request(auth.FleetManager, question, 200, `"status":"limit_reached"`)
-	if calls != 3 {
+	if calls != attempted {
 		t.Fatalf("provider called after quota exhausted: %d", calls)
 	}
 	if allowed, err := store.Reserve(ctx, other, day); err != nil || !allowed {

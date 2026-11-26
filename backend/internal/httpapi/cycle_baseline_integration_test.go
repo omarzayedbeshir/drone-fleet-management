@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/audit"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/auth"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/telemetry"
 )
@@ -46,11 +48,12 @@ func TestCycleBaselineAPIIntegration(t *testing.T) {
 		return &http.Cookie{Name: cookieName, Value: token}, actor
 	}
 	manager, managerID := session(auth.FleetManager, &org)
+	foreignManager, _ := session(auth.FleetManager, &other)
 	tech, techID := session(auth.MaintenanceTechnician, &org)
 	pilot, _ := session(auth.Pilot, &org)
 	admin, _ := session(auth.SystemAdministrator, nil)
 	store := &telemetry.PostgresStore{Pool: pool}
-	handler, err := NewAuthenticatedHandler(AuthConfig{Store: authStore, Telemetry: store, Origin: "http://localhost:5173"})
+	handler, err := NewAuthenticatedHandler(AuthConfig{Store: authStore, Telemetry: store, AuditHistory: audit.PostgresHistory{Pool: pool}, Origin: "http://localhost:5173"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,10 +108,39 @@ func TestCycleBaselineAPIIntegration(t *testing.T) {
 	}
 	check(request("PUT", id, payload(208, 0, 0), manager, true), 409)
 	check(request("PUT", id, payload(206, 207, 1), manager, true), 409)
-	var count int
-	var actor string
-	if err = pool.QueryRow(ctx, `SELECT count(*),max(actor_id::text) FROM audit_events WHERE resource_type='battery_cycles' AND resource_id=$1`, id).Scan(&count, &actor); err != nil || count != 1 || actor != techID {
-		t.Fatalf("audit %d %s %v", count, actor, err)
+	history := func(cookie *http.Cookie) []audit.HistoryEntry {
+		t.Helper()
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/audit-events?resource_type=battery_cycles", nil)
+		r.AddCookie(cookie)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		check(w, http.StatusOK)
+		var page struct{ Events []audit.HistoryEntry }
+		if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil || page.Events == nil {
+			t.Fatalf("invalid maintenance audit history: %s", w.Body)
+		}
+		return page.Events
+	}
+	entries := history(manager)
+	if len(entries) != 1 {
+		t.Fatalf("expected one battery baseline event: %+v", entries)
+	}
+	entry := entries[0]
+	if entry.OrganisationID != org || entry.ActorID != techID || entry.ResourceID != id ||
+		entry.Action != audit.Updated || entry.ResourceType != "battery_cycles" || entry.CreatedAt.IsZero() {
+		t.Fatalf("incorrect battery baseline audit metadata: %+v", entry)
+	}
+	var beforeSnapshot, afterSnapshot telemetry.CycleBaseline
+	if err := json.Unmarshal(entry.Before, &beforeSnapshot); err != nil || !reflect.DeepEqual(beforeSnapshot, before) {
+		t.Fatalf("incorrect previous baseline: %s", entry.Before)
+	}
+	if err := json.Unmarshal(entry.After, &afterSnapshot); err != nil ||
+		afterSnapshot.RecordedAt == nil || !afterSnapshot.RecordedAt.Equal(*manual.RecordedAt) {
+		t.Fatalf("incorrect new baseline timestamp: %s", entry.After)
+	}
+	afterSnapshot.RecordedAt = manual.RecordedAt
+	if !reflect.DeepEqual(afterSnapshot, manual) || len(history(foreignManager)) != 0 {
+		t.Fatalf("incorrect battery baseline audit history: %s", entry.After)
 	}
 	if _, err = pool.Exec(ctx, `CREATE FUNCTION fail_cycle_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'unavailable'; END $$; CREATE TRIGGER fail_cycle_audit BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION fail_cycle_audit()`); err != nil {
 		t.Fatal(err)
@@ -118,9 +150,12 @@ func TestCycleBaselineAPIIntegration(t *testing.T) {
 	if got.Total != 207 || got.Revision != 1 {
 		t.Fatal("audit failure changed baseline")
 	}
-	_ = pool.QueryRow(ctx, `SELECT count(*) FROM battery_cycle_readings`).Scan(&count)
-	if count != 1 {
+	var count int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM battery_cycle_readings`).Scan(&count); err != nil || count != 1 {
 		t.Fatal("audit failure persisted ledger row")
+	}
+	if got := history(manager); !reflect.DeepEqual(got, entries) {
+		t.Fatal("failed baseline write changed the audit history")
 	}
 	if _, err = pool.Exec(ctx, `DROP TRIGGER fail_cycle_audit ON audit_events`); err != nil {
 		t.Fatal(err)
