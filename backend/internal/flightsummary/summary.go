@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
 )
 
 type Counts struct {
@@ -28,7 +28,11 @@ type Facts struct {
 	AircraftInMission int `json:"aircraft_observed_in_mission"`
 }
 
-type PostgresReader struct{ Pool *pgxpool.Pool }
+type PostgresReader struct {
+	Pool interface {
+		Query(context.Context, string, ...any) (pgx.Rows, error)
+	}
+}
 
 func (s PostgresReader) Sources(ctx context.Context, org string, day time.Time) ([]Source, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT d.id::text, d.name, min(t.observed_at), max(t.observed_at),
