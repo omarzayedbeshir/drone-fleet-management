@@ -1222,6 +1222,39 @@ paths:
           $ref: '#/components/responses/UnsupportedMediaType'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /api/v1/fleet-qa:
+    post:
+      operationId: askFleetQuestion
+      description: Sends a question and a limited selection of aircraft, mission, and flight telemetry records from the authenticated organisation to Anthropic. Each organisation shares a limit of 20 provider attempts per UTC day, including failed attempts.
+      x-implementation-status: implemented
+      x-allowed-roles: [fleet_manager]
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [question]
+              properties:
+                question: {type: string, minLength: 1, maxLength: 500}
+      responses:
+        '200':
+          description: Answer with cited sources, insufficient data, daily limit reached, or temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetQAResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
 components:
   securitySchemes:
     SessionCookie:
@@ -2135,6 +2168,26 @@ components:
               last_observation: {type: string, format: date-time}
               observations: {type: integer, minimum: 0}
               in_mission_observations: {type: integer, minimum: 0}
+    FleetQAResult:
+      type: object
+      required: [status, answer, sources]
+      properties:
+        status: {type: string, enum: [answered, insufficient_data, limit_reached, unavailable]}
+        answer: {type: string}
+        resets_at:
+          type: string
+          format: date-time
+          description: Present when the daily quota has been reached.
+        sources:
+          type: array
+          items:
+            type: object
+            required: [number, type, id, data]
+            properties:
+              number: {type: integer, minimum: 1, maximum: 50}
+              type: {type: string, enum: [aircraft, mission, telemetry]}
+              id: {type: string, format: uuid}
+              data: {type: object}
 x-nfr-08:
   implemented:
   - ArduPilot MAVLink adapter verified against SITL (separate operator process)

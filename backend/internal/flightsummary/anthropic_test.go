@@ -17,7 +17,7 @@ func TestAnthropicWriterSendsOnlyCounts(t *testing.T) {
 	want := Facts{Counts: Counts{Observations: 12, InMission: 3}, Aircraft: 2, AircraftInMission: 1}
 	writer := AnthropicWriter{APIKey: "test-key", Model: "test-model", Client: &http.Client{Transport: transportFunc(
 		func(r *http.Request) (*http.Response, error) {
-			if r.Method != http.MethodPost || r.URL.String() != messagesURL ||
+			if r.Method != http.MethodPost || r.URL.String() != "https://api.anthropic.com/v1/messages" ||
 				r.Header.Get("Authorization") != "Bearer test-key" || r.Header.Get("Anthropic-Version") != "2026-10-21" {
 				t.Fatalf("incorrect Anthropic request: %s %s", r.Method, r.URL)
 			}

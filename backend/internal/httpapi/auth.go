@@ -16,6 +16,7 @@ import (
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/auth"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/connectors"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/drones"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/fleetqa"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/flightsummary"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/missions"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/telemetry"
@@ -25,6 +26,7 @@ import (
 const cookieName = "aerosync_session"
 
 type AuthConfig struct {
+	FleetQA       *fleetqa.Service
 	FlightSummary *flightsummary.Service
 	AuditHistory  audit.HistoryReader
 	Store         auth.Store

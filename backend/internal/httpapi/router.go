@@ -52,6 +52,9 @@ func NewAuthenticatedHandler(config AuthConfig) (http.Handler, error) {
 	if config.Registry != nil {
 		registerDrones(mux, a, config.Registry)
 	}
+	if config.FleetQA != nil {
+		registerFleetQA(mux, a, config.FleetQA)
+	}
 	if config.FlightSummary != nil {
 		registerFlightSummary(mux, a, config.FlightSummary)
 	}
