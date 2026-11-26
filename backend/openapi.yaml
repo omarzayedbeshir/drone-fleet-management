@@ -1186,6 +1186,42 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /api/v1/flight-summary:
+    post:
+      operationId: generateFlightSummary
+      description: Builds a daily UTC summary from the fleet manager's organisation telemetry. Optional Claude wording uses only aggregate counts.
+      x-implementation-status: implemented
+      x-allowed-roles: [fleet_manager]
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [day]
+              properties:
+                day: {type: string, format: date}
+                use_ai: {type: boolean, default: false}
+      responses:
+        '200':
+          description: Observed activity with per-aircraft supporting telemetry ranges. Anthropic failures preserve the computed facts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlightSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '503':
+          $ref: '#/components/responses/Unavailable'
 components:
   securitySchemes:
     SessionCookie:
@@ -2072,6 +2108,33 @@ components:
         before_data: {type: [object, 'null']}
         after_data: {type: [object, 'null']}
         created_at: {type: string, format: date-time}
+    FlightSummary:
+      type: object
+      required: [day, facts, sources, narrative, status]
+      properties:
+        day: {type: string, format: date}
+        status: {type: string, enum: [no_data, facts_only, ai_generated, ai_unavailable, ai_not_configured]}
+        narrative: {type: string}
+        facts:
+          type: object
+          required: [aircraft_with_telemetry, aircraft_observed_in_mission, observations, in_mission_observations]
+          properties:
+            aircraft_with_telemetry: {type: integer, minimum: 0}
+            aircraft_observed_in_mission: {type: integer, minimum: 0}
+            observations: {type: integer, minimum: 0}
+            in_mission_observations: {type: integer, minimum: 0}
+        sources:
+          type: array
+          items:
+            type: object
+            required: [drone_id, drone_name, first_observation, last_observation, observations, in_mission_observations]
+            properties:
+              drone_id: {type: string, format: uuid}
+              drone_name: {type: string}
+              first_observation: {type: string, format: date-time}
+              last_observation: {type: string, format: date-time}
+              observations: {type: integer, minimum: 0}
+              in_mission_observations: {type: integer, minimum: 0}
 x-nfr-08:
   implemented:
   - ArduPilot MAVLink adapter verified against SITL (separate operator process)

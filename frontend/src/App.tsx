@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { AuditHistory } from './AuditHistory';
 import { DroneRegistry } from './DroneRegistry';
+import { FlightSummary } from './FlightSummary';
 import { Missions } from './Missions';
 import { AUTH_ACTIVITY_EVENT, AUTH_EXPIRED_EVENT, ApiError, request, type Role, type User } from './api';
 
@@ -132,7 +133,7 @@ function Workspace({ user, signedOut }: { user: User; signedOut: (text: string) 
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const role = roles[user.role];
-  const [area, setArea] = useState<'fleet' | 'missions' | 'audit'>('fleet');
+  const [area, setArea] = useState<'fleet' | 'missions' | 'audit' | 'summary'>('fleet');
   const administrator = user.role === 'system_administrator';
   const canReviewAudit = administrator || user.role === 'fleet_manager';
   const canSchedule = user.role === 'fleet_manager' || user.role === 'pilot';
@@ -162,9 +163,11 @@ function Workspace({ user, signedOut }: { user: User; signedOut: (text: string) 
       {(canSchedule || canReviewAudit) && <nav className="workspace-nav" aria-label="Operations">
         <button className="secondary" aria-current={area === 'fleet' ? 'page' : undefined} onClick={() => setArea('fleet')}>{administrator ? 'Overview' : 'Fleet'}</button>
         {canSchedule && <button className="secondary" aria-current={area === 'missions' ? 'page' : undefined} onClick={() => setArea('missions')}>Missions</button>}
+        {user.role === 'fleet_manager' && <button className="secondary" aria-current={area === 'summary' ? 'page' : undefined} onClick={() => setArea('summary')}>Flight summary</button>}
         {canReviewAudit && <button className="secondary" aria-current={area === 'audit' ? 'page' : undefined} onClick={() => setArea('audit')}>Audit history</button>}
       </nav>}
-      {canReviewAudit && area === 'audit' ? <AuditHistory key={user.id} administrator={administrator} /> : administrator ? <>
+      {user.role === 'fleet_manager' && area === 'summary' ? <FlightSummary key={user.id} /> :
+      canReviewAudit && area === 'audit' ? <AuditHistory key={user.id} administrator={administrator} /> : administrator ? <>
         <h3>Your workspace</h3>
         <ul className="areas">{role.areas.map(area => <li key={area}>{area}<span>Coming soon</span></li>)}</ul>
       </> : canSchedule && area === 'missions' ? <Missions key={user.id} user={user} /> : <DroneRegistry canManage={user.role === 'fleet_manager'} canRecordCycles={user.role === 'fleet_manager' || user.role === 'maintenance_technician'} />}
