@@ -19,17 +19,23 @@ func newIntegrationPool(t *testing.T, through ...string) *pgxpool.Pool {
 	if url == "" {
 		t.Skip("set TEST_DATABASE_URL for PostgreSQL integration tests")
 	}
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	base, err := pgxpool.New(ctx, url)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(base.Close)
+	if err := base.Ping(ctx); err != nil {
+		t.Fatalf("connect to TEST_DATABASE_URL: %v", err)
+	}
 	schema := fmt.Sprintf("app_test_%d", time.Now().UnixNano())
 	if _, err := base.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
-		t.Fatal(err)
+		t.Fatalf("create integration schema: %v", err)
 	}
 	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		if _, err := base.Exec(ctx, "DROP SCHEMA "+schema+" CASCADE"); err != nil {
 			t.Error(err)
 		}

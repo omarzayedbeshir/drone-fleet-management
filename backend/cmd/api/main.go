@@ -19,6 +19,7 @@ import (
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/database"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/drones"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/httpapi"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/missions"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/telemetry"
 )
 
@@ -67,6 +68,7 @@ func run() error {
 	connectorStore := &connectors.PostgresStore{Pool: pool, Profiles: profiles}
 	handler, err := httpapi.NewAuthenticatedHandler(httpapi.AuthConfig{
 		Store: &auth.PostgresStore{Pool: pool}, Registry: &drones.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}, Freshness: freshness}, Telemetry: &telemetry.PostgresStore{Pool: pool}, Connectors: connectorStore, Origin: os.Getenv("APP_ORIGIN"), SecureCookies: secure,
+		Missions: &missions.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}, Freshness: freshness},
 	})
 	if err != nil {
 		return err
