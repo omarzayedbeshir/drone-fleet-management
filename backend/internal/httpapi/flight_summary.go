@@ -32,3 +32,34 @@ func registerFlightSummary(mux *http.ServeMux, a *authHandler, service *flightsu
 		writeJSON(w, http.StatusOK, report)
 	}, auth.FleetManager)))
 }
+
+func registerScheduledFlightSummary(mux *http.ServeMux, a *authHandler, schedule *flightsummary.PostgresSchedule) {
+	mux.HandleFunc("GET /api/v1/flight-summary/schedule", a.authenticated(func(w http.ResponseWriter, r *http.Request) {
+		result, err := schedule.Read(r.Context(), *currentUser(r).OrganisationID)
+		if err != nil {
+			slog.Error("Read daily flight summary schedule failed", "error", err)
+			writeError(w, http.StatusServiceUnavailable, "Daily flight summary settings are temporarily unavailable")
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+	}, auth.FleetManager))
+	mux.HandleFunc("PUT /api/v1/flight-summary/schedule", a.sameOrigin(a.authenticated(func(w http.ResponseWriter, r *http.Request) {
+		var input struct {
+			Enabled *bool `json:"enabled"`
+		}
+		if !readJSON(w, r, &input) {
+			return
+		}
+		if input.Enabled == nil {
+			writeError(w, http.StatusBadRequest, "enabled is required")
+			return
+		}
+		user := currentUser(r)
+		if err := schedule.SetEnabled(r.Context(), *user.OrganisationID, user.ID, *input.Enabled); err != nil {
+			slog.Error("Update daily flight summary schedule failed", "error", err)
+			writeError(w, http.StatusServiceUnavailable, "Daily flight summary settings are temporarily unavailable")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}, auth.FleetManager)))
+}

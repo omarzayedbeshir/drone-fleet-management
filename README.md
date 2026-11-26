@@ -128,3 +128,11 @@ See [Sprint 1 implementation/evidence status](docs/SPRINT1_STATUS.md), the
 [DJI source contract](docs/DJI_SOURCE_CONTRACT.md). Trusted operator-installed
 modules register vendor metadata and use the existing normalized schema; the
 registry discovers display/registration choices from its server catalog.
+
+## Daily flight summaries and audit export
+
+Fleet managers can enable **Automatic daily delivery** in **Flight summary**. The setting applies to their organisation and starts disabled. The API checks once a minute and publishes the previous UTC day's report in the app after midnight, normally by 01:00 UTC. If the API was offline overnight, it checks for the most recent completed UTC day when it starts. Disabling delivery keeps the last report and stops future deliveries.
+
+Set `ANTHROPIC_API_KEY` and `FLIGHT_SUMMARY_ANTHROPIC_MODEL` in the backend environment to allow Claude wording. Scheduled reports share aggregate counts with Anthropic when configured. Reports still show recorded figures if Claude is unavailable.
+
+In **Audit history**, **Download CSV** exports all events matching the active organisation and resource filters, including the before and after snapshots.

@@ -69,6 +69,7 @@ func run() error {
 		return errors.New("cannot install adapter vendor catalog; apply migrations first")
 	}
 	connectorStore := &connectors.PostgresStore{Pool: pool, Profiles: profiles}
+	summarySchedule := &flightsummary.PostgresSchedule{Pool: pool}
 	flightSummary := &flightsummary.Service{Reader: flightsummary.PostgresReader{Pool: pool}}
 	fleetQA := &fleetqa.Service{Store: fleetqa.PostgresStore{Pool: pool}}
 	if key, model := os.Getenv("ANTHROPIC_API_KEY"), os.Getenv("FLIGHT_SUMMARY_ANTHROPIC_MODEL"); key != "" && model != "" {
@@ -77,10 +78,11 @@ func run() error {
 	}
 	handler, err := httpapi.NewAuthenticatedHandler(httpapi.AuthConfig{
 		Store: &auth.PostgresStore{Pool: pool}, Registry: &drones.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}, Freshness: freshness}, Telemetry: &telemetry.PostgresStore{Pool: pool}, Connectors: connectorStore, Origin: os.Getenv("APP_ORIGIN"), SecureCookies: secure,
-		FleetQA:       fleetQA,
-		FlightSummary: flightSummary,
-		AuditHistory:  audit.PostgresHistory{Pool: pool},
-		Missions:      &missions.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}, Freshness: freshness},
+		FleetQA:                fleetQA,
+		ScheduledFlightSummary: summarySchedule,
+		FlightSummary:          flightSummary,
+		AuditHistory:           audit.PostgresHistory{Pool: pool},
+		Missions:               &missions.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}, Freshness: freshness},
 	})
 	if err != nil {
 		return err
@@ -94,6 +96,12 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	summaryDone := make(chan struct{})
+	go func() {
+		defer close(summaryDone)
+		summarySchedule.Run(ctx, *flightSummary)
+	}()
+	defer func() { stop(); <-summaryDone }()
 	connectorDone := make(chan struct{})
 	go func() { defer close(connectorDone); (&connectors.Manager{Store: connectorStore}).Run(ctx) }()
 	defer func() { stop(); <-connectorDone }()

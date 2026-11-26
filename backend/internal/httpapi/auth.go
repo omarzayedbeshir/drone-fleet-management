@@ -26,16 +26,17 @@ import (
 const cookieName = "aerosync_session"
 
 type AuthConfig struct {
-	FleetQA       *fleetqa.Service
-	FlightSummary *flightsummary.Service
-	AuditHistory  audit.HistoryReader
-	Store         auth.Store
-	Registry      drones.Store
-	Missions      missions.Store
-	Telemetry     telemetry.Store
-	Connectors    connectors.Store
-	Origin        string
-	SecureCookies bool
+	ScheduledFlightSummary *flightsummary.PostgresSchedule
+	FleetQA                *fleetqa.Service
+	FlightSummary          *flightsummary.Service
+	AuditHistory           audit.HistoryReader
+	Store                  auth.Store
+	Registry               drones.Store
+	Missions               missions.Store
+	Telemetry              telemetry.Store
+	Connectors             connectors.Store
+	Origin                 string
+	SecureCookies          bool
 }
 
 type authHandler struct {

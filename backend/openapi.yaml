@@ -1255,6 +1255,55 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '415':
           $ref: '#/components/responses/UnsupportedMediaType'
+  /api/v1/flight-summary/schedule:
+    get:
+      operationId: getFlightSummarySchedule
+      description: Reads the authenticated organisation's daily delivery setting and its latest in-app report.
+      x-implementation-status: implemented
+      x-allowed-roles: [fleet_manager]
+      responses:
+        '200':
+          description: Daily delivery setting and latest report, if one has been delivered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlightSummarySchedule'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    put:
+      operationId: updateFlightSummarySchedule
+      description: Enables or disables automatic in-app delivery for the authenticated organisation. Enabled organisations receive the previous UTC day's report after midnight. Claude receives aggregate counts when configured.
+      x-implementation-status: implemented
+      x-allowed-roles: [fleet_manager]
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enabled]
+              properties:
+                enabled: {type: boolean}
+      responses:
+        '204':
+          description: Daily delivery setting saved.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '503':
+          $ref: '#/components/responses/Unavailable'
 components:
   securitySchemes:
     SessionCookie:
@@ -2188,6 +2237,20 @@ components:
               type: {type: string, enum: [aircraft, mission, telemetry]}
               id: {type: string, format: uuid}
               data: {type: object}
+    FlightSummarySchedule:
+      type: object
+      required: [enabled, latest]
+      properties:
+        enabled: {type: boolean}
+        latest:
+          oneOf:
+          - type: 'null'
+          - type: object
+            required: [report, delivered_at]
+            properties:
+              report:
+                $ref: '#/components/schemas/FlightSummary'
+              delivered_at: {type: string, format: date-time}
 x-nfr-08:
   implemented:
   - ArduPilot MAVLink adapter verified against SITL (separate operator process)
