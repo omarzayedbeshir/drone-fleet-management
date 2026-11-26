@@ -16,6 +16,7 @@ import (
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/auth"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/connectors"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/drones"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/flightsummary"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/missions"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/telemetry"
 	"golang.org/x/crypto/bcrypt"
@@ -24,6 +25,7 @@ import (
 const cookieName = "aerosync_session"
 
 type AuthConfig struct {
+	FlightSummary *flightsummary.Service
 	AuditHistory  audit.HistoryReader
 	Store         auth.Store
 	Registry      drones.Store

@@ -18,6 +18,7 @@ import (
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/connectors"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/database"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/drones"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/flightsummary"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/httpapi"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/missions"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/telemetry"
@@ -66,10 +67,15 @@ func run() error {
 		return errors.New("cannot install adapter vendor catalog; apply migrations first")
 	}
 	connectorStore := &connectors.PostgresStore{Pool: pool, Profiles: profiles}
+	flightSummary := &flightsummary.Service{Reader: flightsummary.PostgresReader{Pool: pool}}
+	if key, model := os.Getenv("ANTHROPIC_API_KEY"), os.Getenv("FLIGHT_SUMMARY_ANTHROPIC_MODEL"); key != "" && model != "" {
+		flightSummary.Writer = flightsummary.AnthropicWriter{APIKey: key, Model: model}
+	}
 	handler, err := httpapi.NewAuthenticatedHandler(httpapi.AuthConfig{
 		Store: &auth.PostgresStore{Pool: pool}, Registry: &drones.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}, Freshness: freshness}, Telemetry: &telemetry.PostgresStore{Pool: pool}, Connectors: connectorStore, Origin: os.Getenv("APP_ORIGIN"), SecureCookies: secure,
-		AuditHistory: audit.PostgresHistory{Pool: pool},
-		Missions:     &missions.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}, Freshness: freshness},
+		FlightSummary: flightSummary,
+		AuditHistory:  audit.PostgresHistory{Pool: pool},
+		Missions:      &missions.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}, Freshness: freshness},
 	})
 	if err != nil {
 		return err

@@ -190,7 +190,7 @@ form button { margin-top: 12px; }
 .connector-panel p { font-size: .9rem; line-height: 1.6; }
 .connector-panel select { width: 100%; margin-top: .4rem; }
 
-.workspace-nav { display: flex; gap: 8px; margin-top: 22px; }
+.workspace-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
 .workspace-nav button[aria-current] { border-color: var(--line); background: #e8eee8; font-weight: 700; }
 .mission-screen .registry-heading { margin-bottom: 18px; }
 .mission-editor { margin: 0 0 18px; max-width: 740px; }
