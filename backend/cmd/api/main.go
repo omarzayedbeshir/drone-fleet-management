@@ -12,12 +12,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/anthropic"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/audit"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/auth"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/catalog"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/connectors"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/database"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/drones"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/fleetqa"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/flightsummary"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/httpapi"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/missions"
@@ -68,11 +70,14 @@ func run() error {
 	}
 	connectorStore := &connectors.PostgresStore{Pool: pool, Profiles: profiles}
 	flightSummary := &flightsummary.Service{Reader: flightsummary.PostgresReader{Pool: pool}}
+	fleetQA := &fleetqa.Service{Store: fleetqa.PostgresStore{Pool: pool}}
 	if key, model := os.Getenv("ANTHROPIC_API_KEY"), os.Getenv("FLIGHT_SUMMARY_ANTHROPIC_MODEL"); key != "" && model != "" {
 		flightSummary.Writer = flightsummary.AnthropicWriter{APIKey: key, Model: model}
+		fleetQA.Model = anthropic.Client{APIKey: key, Model: model}
 	}
 	handler, err := httpapi.NewAuthenticatedHandler(httpapi.AuthConfig{
 		Store: &auth.PostgresStore{Pool: pool}, Registry: &drones.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}, Freshness: freshness}, Telemetry: &telemetry.PostgresStore{Pool: pool}, Connectors: connectorStore, Origin: os.Getenv("APP_ORIGIN"), SecureCookies: secure,
+		FleetQA:       fleetQA,
 		FlightSummary: flightSummary,
 		AuditHistory:  audit.PostgresHistory{Pool: pool},
 		Missions:      &missions.PostgresStore{Pool: pool, Recorder: audit.PostgresRecorder{}, Freshness: freshness},

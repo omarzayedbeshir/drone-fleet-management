@@ -222,3 +222,5 @@ form button { margin-top: 12px; }
 .audit-event dd { margin: 0; overflow-wrap: anywhere; }
 .audit-identifiers, .audit-snapshots { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); gap: 12px; }
 .audit-snapshots pre { padding: 12px; margin-bottom: 0; white-space: pre-wrap; overflow-wrap: anywhere; background: #f5f5f0; }
+
+.fleet-qa-answer { margin: 12px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
