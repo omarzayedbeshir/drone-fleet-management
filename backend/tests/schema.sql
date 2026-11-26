@@ -114,4 +114,79 @@ BEGIN
     END IF;
 END;
 $$;
+
+-- Mission scheduling constraints.
+DO $$
+DECLARE
+    tenant uuid;
+    other_tenant uuid;
+    drone_a uuid;
+    drone_b uuid;
+    pilot_a uuid;
+    pilot_b uuid;
+    first_mission uuid;
+    start_time constant timestamptz := '2026-11-27 09:00:00+00';
+    end_time constant timestamptz := '2026-11-27 10:00:00+00';
+BEGIN
+    INSERT INTO organisations (name) VALUES ('Mission test') RETURNING id INTO tenant;
+    INSERT INTO organisations (name) VALUES ('Mission test other tenant') RETURNING id INTO other_tenant;
+    INSERT INTO drones (organisation_id, name, vendor, model, serial_number)
+        VALUES (tenant, 'Drone A', 'dji', 'Test model', 'MISSION-A') RETURNING id INTO drone_a;
+    INSERT INTO drones (organisation_id, name, vendor, model, serial_number)
+        VALUES (tenant, 'Drone B', 'dji', 'Test model', 'MISSION-B') RETURNING id INTO drone_b;
+    INSERT INTO users (organisation_id, name, email, password_hash, role)
+        VALUES (tenant, 'Pilot A', 'mission-a@example.test', 'test-hash', 'pilot') RETURNING id INTO pilot_a;
+    INSERT INTO users (organisation_id, name, email, password_hash, role)
+        VALUES (tenant, 'Pilot B', 'mission-b@example.test', 'test-hash', 'pilot') RETURNING id INTO pilot_b;
+
+    INSERT INTO missions (organisation_id, drone_id, pilot_id, location, starts_at, ends_at)
+        VALUES (tenant, drone_a, pilot_a, 'Test field', start_time, end_time) RETURNING id INTO first_mission;
+
+    BEGIN
+        INSERT INTO missions (organisation_id, drone_id, pilot_id, location, starts_at, ends_at)
+            VALUES (tenant, drone_a, pilot_b, 'Test field', start_time, end_time);
+        RAISE EXCEPTION 'Accepted overlapping drone bookings';
+    EXCEPTION WHEN exclusion_violation THEN NULL;
+    END;
+    BEGIN
+        INSERT INTO missions (organisation_id, drone_id, pilot_id, location, starts_at, ends_at)
+            VALUES (tenant, drone_b, pilot_a, 'Test field', start_time, end_time);
+        RAISE EXCEPTION 'Accepted overlapping pilot bookings';
+    EXCEPTION WHEN exclusion_violation THEN NULL;
+    END;
+    BEGIN
+        INSERT INTO missions (organisation_id, drone_id, pilot_id, location, starts_at, ends_at)
+            VALUES (other_tenant, drone_a, pilot_a, 'Test field', start_time, end_time);
+        RAISE EXCEPTION 'Accepted a cross-tenant assignment';
+    EXCEPTION WHEN foreign_key_violation THEN NULL;
+    END;
+    BEGIN
+        INSERT INTO missions (organisation_id, drone_id, pilot_id, location, starts_at, ends_at, near_populated_area)
+            VALUES (tenant, drone_b, pilot_b, 'Test field', start_time, end_time, true);
+        RAISE EXCEPTION 'Accepted flagged mission without safety details';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+    UPDATE drones SET status = 'grounded' WHERE id = drone_b;
+    BEGIN
+        INSERT INTO missions (organisation_id, drone_id, pilot_id, location, starts_at, ends_at)
+            VALUES (tenant, drone_b, pilot_b, 'Test field', start_time, end_time);
+        RAISE EXCEPTION 'Accepted a grounded drone';
+    EXCEPTION WHEN check_violation THEN NULL;
+    END;
+
+    -- Adjacent windows are valid, and cancellations release both resources.
+    INSERT INTO missions (organisation_id, drone_id, pilot_id, location, starts_at, ends_at)
+        VALUES (tenant, drone_a, pilot_a, 'Test field', end_time, end_time + interval '1 hour');
+    UPDATE missions SET cancelled_at = now() WHERE id = first_mission;
+    INSERT INTO missions (organisation_id, drone_id, pilot_id, location, starts_at, ends_at,
+                          near_populated_area, safety_rationale, safety_acknowledged)
+        VALUES (tenant, drone_a, pilot_a, 'Test field', start_time, end_time,
+                true, 'Maintain separation from nearby residences', true);
+
+    DELETE FROM organisations WHERE id = tenant;
+    IF EXISTS (SELECT 1 FROM missions WHERE organisation_id = tenant) THEN
+        RAISE EXCEPTION 'Organisation deletion left mission records';
+    END IF;
+END;
+$$;
 ROLLBACK;

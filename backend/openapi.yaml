@@ -26,6 +26,8 @@ tags:
   description: Organisation-scoped drone metadata and read-only projections.
 - name: Telemetry
   description: Normalized manual ingestion and accepted observation history.
+- name: Missions
+  description: Organisation-scoped scheduling and pilot assignments.
 security:
 - SessionCookie: []
 paths:
@@ -973,6 +975,170 @@ paths:
                 $ref: '#/components/schemas/Error'
         '415':
           $ref: '#/components/responses/UnsupportedMediaType'
+  /api/v1/missions:
+    get:
+      operationId: listMissions
+      tags: [Missions]
+      description: Managers see all organisation missions. Pilots see their assigned missions. Results include past and cancelled missions and current drone status, ordered by descending start time and ID.
+      x-implementation-status: implemented
+      x-allowed-roles: [fleet_manager, pilot]
+      parameters:
+      - $ref: '#/components/parameters/MissionLimit'
+      - $ref: '#/components/parameters/MissionOffset'
+      responses:
+        '200':
+          description: Mission page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    post:
+      operationId: createMission
+      tags: [Missions]
+      description: Schedule a mission. Pilots can only assign themselves. Adjacent booking windows may share an endpoint.
+      x-implementation-status: implemented
+      x-allowed-roles: [fleet_manager, pilot]
+      parameters:
+      - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MissionInput'
+      responses:
+        '201':
+          description: Mission created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '409':
+          description: Drone or pilot already booked, drone grounded, pilot ineligible, or mission cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+  /api/v1/missions/assignment-options:
+    get:
+      operationId: listMissionAssignmentOptions
+      tags: [Missions]
+      description: Lists organisation aircraft and pilots for the mission screen. Pilots only receive their own pilot option. Grounded aircraft and historically assigned users who can no longer be assigned are marked ineligible.
+      x-implementation-status: implemented
+      x-allowed-roles: [fleet_manager, pilot]
+      responses:
+        '200':
+          description: Aircraft and pilot options.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [drones, pilots]
+                properties:
+                  drones:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MissionAssignmentOption'
+                  pilots:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MissionAssignmentOption'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /api/v1/missions/{id}:
+    put:
+      operationId: updateMission
+      tags: [Missions]
+      description: Replace all editable fields on an active mission. Pilots can edit only missions assigned to themselves and must remain the assigned pilot.
+      x-implementation-status: implemented
+      x-allowed-roles: [fleet_manager, pilot]
+      parameters:
+      - $ref: '#/components/parameters/MissionID'
+      - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MissionInput'
+      responses:
+        '200':
+          description: Mission updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionResponse'
+        '404':
+          description: Mission outside the caller’s assignment or organisation, or missing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '409':
+          description: Drone or pilot already booked, drone grounded, pilot ineligible, or mission cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+  /api/v1/missions/{id}/cancel:
+    post:
+      operationId: cancelMission
+      tags: [Missions]
+      description: Cancel a mission and release its bookings. Repeated cancellation succeeds without another audit event.
+      x-implementation-status: implemented
+      x-allowed-roles: [fleet_manager, pilot]
+      parameters:
+      - $ref: '#/components/parameters/MissionID'
+      - $ref: '#/components/parameters/Origin'
+      responses:
+        '204':
+          description: Mission cancelled.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Mission outside the caller’s assignment or organisation, or missing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
 components:
   securitySchemes:
     SessionCookie:
@@ -1040,6 +1206,21 @@ components:
         maxLength: 200
       description: Trimmed, case-insensitive literal substring across name/model/serial. Percent, underscore, and
         backslash are literal; NUL is rejected. At most once.
+    MissionID:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MissionLimit:
+      in: query
+      name: limit
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    MissionOffset:
+      in: query
+      name: offset
+      schema: {type: integer, minimum: 0, maximum: 1000000, default: 0}
   responses:
     BadRequest:
       description: Invalid request body, UUID, or query parameters. Registry/auth JSON parsing and their 4 KiB body-limit
@@ -1763,6 +1944,74 @@ components:
       properties:
         battery_cycles:
           $ref: '#/components/schemas/CycleBaseline'
+    MissionAssignmentOption:
+      type: object
+      required: [id, name, eligible]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        eligible: {type: boolean}
+    MissionInput:
+      type: object
+      additionalProperties: false
+      required: [drone_id, pilot_id, location, starts_at, ends_at]
+      description: Location and rationale are trimmed. The end must be after the start at microsecond precision.
+      properties:
+        drone_id: {type: string, format: uuid}
+        pilot_id: {type: string, format: uuid}
+        location: {type: string, minLength: 1, maxLength: 500}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: string, format: date-time}
+        near_populated_area: {type: boolean, default: false}
+        safety_rationale:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 2000
+          description: Required for flagged missions, otherwise null or omitted.
+        safety_acknowledged:
+          type: boolean
+          default: false
+          description: Must be true for flagged missions and false otherwise.
+    Mission:
+      type: object
+      required: [id, organisation_id, drone_id, pilot_id, location, starts_at, ends_at, near_populated_area, safety_rationale, safety_acknowledged, cancelled_at, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        organisation_id: {type: string, format: uuid}
+        drone_id: {type: string, format: uuid}
+        pilot_id: {type: string, format: uuid}
+        location: {type: string}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: string, format: date-time}
+        near_populated_area: {type: boolean}
+        safety_rationale: {type: [string, 'null']}
+        safety_acknowledged: {type: boolean}
+        cancelled_at: {type: [string, 'null'], format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    MissionResponse:
+      type: object
+      required: [mission]
+      properties:
+        mission:
+          $ref: '#/components/schemas/Mission'
+    MissionPage:
+      type: object
+      required: [missions, pagination]
+      properties:
+        missions:
+          type: array
+          items:
+            allOf:
+            - $ref: '#/components/schemas/Mission'
+            - type: object
+              required: [drone_status]
+              properties:
+                drone_status:
+                  type: string
+                  enum: [available, charging, in_mission, grounded, unknown]
+        pagination:
+          $ref: '#/components/schemas/Pagination'
 x-nfr-08:
   implemented:
   - ArduPilot MAVLink adapter verified against SITL (separate operator process)

@@ -15,6 +15,7 @@ import (
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/auth"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/connectors"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/drones"
+	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/missions"
 	"github.com/omarzayedbeshir/drone-fleet-management/backend/internal/telemetry"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -24,6 +25,7 @@ const cookieName = "aerosync_session"
 type AuthConfig struct {
 	Store         auth.Store
 	Registry      drones.Store
+	Missions      missions.Store
 	Telemetry     telemetry.Store
 	Connectors    connectors.Store
 	Origin        string
@@ -52,11 +54,15 @@ func writeError(w http.ResponseWriter, status int, message string) {
 }
 
 func readJSON(w http.ResponseWriter, r *http.Request, value any) bool {
+	return readJSONWithLimit(w, r, value, 4096)
+}
+
+func readJSONWithLimit(w http.ResponseWriter, r *http.Request, value any, limit int64) bool {
 	if strings.Split(r.Header.Get("Content-Type"), ";")[0] != "application/json" {
 		writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
 		return false
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(value); err != nil {

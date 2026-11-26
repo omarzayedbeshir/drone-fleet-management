@@ -189,3 +189,26 @@ form button { margin-top: 12px; }
 .connector-panel { border-top: 1px solid #d6dcd6; margin-top: 1.25rem; padding-top: 1rem; }
 .connector-panel p { font-size: .9rem; line-height: 1.6; }
 .connector-panel select { width: 100%; margin-top: .4rem; }
+
+.workspace-nav { display: flex; gap: 8px; margin-top: 22px; }
+.workspace-nav button[aria-current] { border-color: var(--line); background: #e8eee8; font-weight: 700; }
+.mission-screen .registry-heading { margin-bottom: 18px; }
+.mission-editor { margin: 0 0 18px; max-width: 740px; }
+.mission-editor h4 { margin: 0 0 12px; font-size: 18px; }
+.mission-fields { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.mission-fields label { display: grid; gap: 5px; min-width: 0; }
+.mission-fields textarea { font: inherit; padding: 8px; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
+.mission-fields .mission-checkbox { display: flex; align-items: center; gap: 8px; }
+.mission-checkbox input[type=checkbox] { width: 16px; height: 16px; min-height: 0; margin: 0; padding: 0; flex: none; }
+.mission-wide { grid-column: 1 / -1; }
+.mission-editor .row-actions { margin-top: 12px; gap: 8px; flex-wrap: wrap; }
+.mission-table-wrap { overflow-x: auto; }
+.mission-table { min-width: 700px; width: 100%; border-collapse: collapse; }
+.mission-table :is(td, th) { border-bottom: 1px solid var(--line); text-align: start; vertical-align: top; padding: 12px; }
+.mission-table thead { background: #f0f2ec; }
+.mission-table tbody th span { display: block; font-weight: 400; margin-top: 4px; }
+.mission-table .status-badge { width: fit-content; margin-top: 4px; display: block; }
+.mission-pagination { display: flex; justify-content: flex-end; align-items: center; gap: 10px; padding: 10px; }
+@media (max-width: 540px) {
+  .mission-fields { grid-template-columns: minmax(0, 1fr); }
+}

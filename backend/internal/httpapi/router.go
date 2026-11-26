@@ -52,6 +52,9 @@ func NewAuthenticatedHandler(config AuthConfig) (http.Handler, error) {
 	if config.Registry != nil {
 		registerDrones(mux, a, config.Registry)
 	}
+	if config.Missions != nil {
+		registerMissions(mux, a, config.Missions)
+	}
 	if config.Telemetry != nil {
 		registerTelemetry(mux, a, config.Telemetry)
 		if cycleStore, ok := config.Telemetry.(telemetry.CycleBaselineStore); ok {

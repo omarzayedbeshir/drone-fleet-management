@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { DroneRegistry } from './DroneRegistry';
+import { Missions } from './Missions';
 import { AUTH_ACTIVITY_EVENT, AUTH_EXPIRED_EVENT, ApiError, request, type Role, type User } from './api';
 
 const roles: Record<Role, { label: string; description: string; areas: string[] }> = {
@@ -130,6 +131,8 @@ function Workspace({ user, signedOut }: { user: User; signedOut: (text: string) 
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const role = roles[user.role];
+  const [area, setArea] = useState<'fleet' | 'missions'>('fleet');
+  const canSchedule = user.role === 'fleet_manager' || user.role === 'pilot';
 
   async function logout() {
     setBusy(true); setError('');
@@ -153,10 +156,14 @@ function Workspace({ user, signedOut }: { user: User; signedOut: (text: string) 
       </div>
       {error && <p role="alert" className="error">{error}</p>}
       {showPassword && <PasswordForm signedOut={signedOut} />}
+      {canSchedule && <nav className="workspace-nav" aria-label="Operations">
+        <button className="secondary" aria-current={area === 'fleet' ? 'page' : undefined} onClick={() => setArea('fleet')}>Fleet</button>
+        <button className="secondary" aria-current={area === 'missions' ? 'page' : undefined} onClick={() => setArea('missions')}>Missions</button>
+      </nav>}
       {user.role === 'system_administrator' ? <>
         <h3>Your workspace</h3>
         <ul className="areas">{role.areas.map(area => <li key={area}>{area}<span>Coming soon</span></li>)}</ul>
-      </> : <DroneRegistry canManage={user.role === 'fleet_manager'} canRecordCycles={user.role === 'fleet_manager' || user.role === 'maintenance_technician'} />}
+      </> : canSchedule && area === 'missions' ? <Missions key={user.id} user={user} /> : <DroneRegistry canManage={user.role === 'fleet_manager'} canRecordCycles={user.role === 'fleet_manager' || user.role === 'maintenance_technician'} />}
       <footer className="workspace-footer"><span>AeroSync · Fleet management</span><span>Sessions expire after 30 minutes of inactivity.</span></footer>
     </section>
   );
